@@ -36,7 +36,8 @@ const CreateColumnSchema = z.object({
 // GET /api/boards - Get user's boards
 router.get('/', async (req, res) => {
   try {
-    if (process.env.NODE_ENV === 'development') {
+    // Only log debug info if DEBUG_API environment variable is set
+    if (process.env.DEBUG_API === 'true') {
       console.log('[API DEBUG] GET /api/boards user', { userId: req.user?.id })
     }
     const userId = req.user!.id;
@@ -103,7 +104,7 @@ router.get('/', async (req, res) => {
       }
     });
 
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.DEBUG_API === 'true') {
       console.log('[API DEBUG] GET /api/boards count', boards.length)
     }
     res.json({ boards });
@@ -118,7 +119,7 @@ router.get('/:boardId', async (req, res) => {
   try {
     const { boardId } = req.params;
     const userId = req.user!.id;
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.DEBUG_API === 'true') {
       console.log('[API DEBUG] GET /api/boards/:boardId', { boardId, userId })
     }
 

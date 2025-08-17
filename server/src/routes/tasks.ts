@@ -6,7 +6,9 @@ const router = express.Router();
 const DEBUG_API = process.env.NODE_ENV === 'development' || process.env.DEBUG_API === 'true'
 
 function apiDebugLog(label: string, data?: any) {
-  if (!DEBUG_API) return
+  // Only log if DEBUG_API environment variable is set
+  if (process.env.DEBUG_API !== 'true') return
+  
   try {
     // Avoid logging secrets
     const safe = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data

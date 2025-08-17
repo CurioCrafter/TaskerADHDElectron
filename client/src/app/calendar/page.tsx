@@ -9,9 +9,10 @@ import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameD
 import type { Task } from '@/types'
 
 export default function CalendarPage() {
-  const { boards, fetchBoards } = useBoardStore()
+  const { boards, fetchBoards, isLoading } = useBoardStore()
   const { debugMode } = useSettingsStore()
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [isInitializing, setIsInitializing] = useState(true)
   
   // Only log in debug mode (client-side only)
   useEffect(() => {
@@ -52,9 +53,19 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedBoard, setSelectedBoard] = useState<string>('all')
 
-  // Load boards on mount
+  // Load boards on mount with proper loading state
   useEffect(() => {
-    fetchBoards()
+    const loadData = async () => {
+      setIsInitializing(true)
+      try {
+        await fetchBoards()
+      } catch (error) {
+        console.error('Failed to load boards for calendar:', error)
+      } finally {
+        setIsInitializing(false)
+      }
+    }
+    loadData()
   }, [fetchBoards])
 
   // Get all tasks with due dates from all boards
@@ -311,6 +322,22 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
+    )
+  }
+
+  // Show loading state during initial load
+  if (isInitializing || isLoading) {
+    return (
+      <AppLayout title="Calendar">
+        <div className="p-6">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+              <p className="text-gray-600 dark:text-gray-400">Loading calendar...</p>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
     )
   }
 

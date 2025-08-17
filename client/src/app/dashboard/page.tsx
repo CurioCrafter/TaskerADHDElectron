@@ -14,6 +14,7 @@ import { EnergyDashboard } from '@/components/energy/energy-dashboard'
 import { EnergyFilter } from '@/components/filters/energy-filter'
 import { AppLayout } from '@/components/layout/app-layout'
 import { DebugToggle } from '@/components/debug-toggle'
+import { TimerWidget, useTimerWidget } from '@/components/time-tracking/timer-widget'
 import { toast } from 'react-hot-toast'
 import { Column as KanbanColumn } from '@/components/kanban/Column'
 
@@ -47,6 +48,9 @@ export default function DashboardPage() {
   
   // Get debug state from settings store
   const { debugMode } = useSettingsStore()
+  
+  // Timer widget state
+  const timerWidget = useTimerWidget()
   
   useEffect(() => {
     if (debugMode) {
@@ -314,6 +318,13 @@ export default function DashboardPage() {
             >
               ➕ New Task
             </button>
+            <button
+              onClick={timerWidget.toggleWidget}
+              className="btn-ghost"
+              title="Show/Hide Timer Widget"
+            >
+              ⏱️ Timer
+            </button>
             <button 
               onClick={async () => {
                 if (currentBoard) {
@@ -543,6 +554,14 @@ export default function DashboardPage() {
             }}
           />
         )}
+
+        {/* Timer Widget */}
+        <TimerWidget
+          isVisible={timerWidget.isVisible}
+          onClose={timerWidget.hideWidget}
+          position={timerWidget.position}
+          onPositionChange={timerWidget.updatePosition}
+        />
         </div>
     </AppLayout>
   )

@@ -31,6 +31,12 @@ export function Sidebar({ className = '' }: SidebarProps) {
       description: 'Manage your projects'
     },
     {
+      name: 'Time Track',
+      href: '/timetrack',
+      icon: '⏱️',
+      description: 'Track time spent on tasks'
+    },
+    {
       name: 'Calendar',
       href: '/calendar',
       icon: '📅',
