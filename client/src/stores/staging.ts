@@ -104,7 +104,15 @@ export const useStagingStore = create<StagingState>()(
           energy: task.energy,
           estimateMin: task.estimateMin,
           dueAt: task.dueAt,
-          labels: task.labels || [],
+          labels: (task.labels || []).map(labelName => ({
+            taskId: '', // Will be set when task is created
+            labelId: `temp_${Math.random().toString(36).substr(2, 9)}`,
+            label: {
+              id: `temp_${Math.random().toString(36).substr(2, 9)}`,
+              name: labelName,
+              color: undefined
+            }
+          })),
           subtasks: task.subtasks || [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

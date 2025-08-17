@@ -135,50 +135,56 @@ export class VoiceCalendarIntegration {
         console.error('VoiceCalendarIntegration: JSON parse error:', e, 'Raw content:', raw)
         // Ask follow-up clarification when ambiguous
         return {
-          intent: 'task_only',
-          tasks: await this.extractTasksOnly(transcript),
+          intent: 'needs_clarification',
+          tasks: [{
+            id: `clarify_${Date.now()}`,
+            title: '❓ Need more details',
+            summary: `Original request: "${transcript}"\n\nPlease provide more specific details about timing, location, and frequency.`,
+            priority: 'MEDIUM',
+            energy: 'LOW',
+            estimateMin: 5,
+            dueAt: null,
+            isRepeatable: false
+          }],
           calendarEvents: [],
-          confidence: 0.4
+          clarifyingQuestions: [
+            'What specific time?',
+            'Which day(s) of the week?',
+            'How often should this repeat?',
+            'Where should this happen?'
+          ],
+          confidence: 0.2
         }
       }
 
       // Determine threshold (settings or default 0.4)
       const threshold = typeof clarifyThreshold === 'number' ? clarifyThreshold : 0.4
-      // Post-process: if low confidence or ambiguous, request clarifying questions
-      if (result.confidence <= threshold || !result.calendarEvents || result.calendarEvents.length === 0) {
-        // Attempt a second pass asking for clarification questions
-        try {
-          const clarify = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: 'Return JSON {"questions": ["question1", ...] } asking the minimum clarifying questions to schedule the user intent properly (time/day/recurrence). Keep it short.' },
-                { role: 'user', content: transcript }
-              ],
-              temperature: 0.2,
-              response_format: { type: 'json_object' }
-            })
-          })
-          if (clarify.ok) {
-            const c = await clarify.json()
-            const qs = JSON.parse(c.choices?.[0]?.message?.content || '{"questions":[]}')
-            if (Array.isArray(qs.questions) && qs.questions.length) {
-              // Encode questions into a special task so UI can prompt the user
-              return {
-                intent: 'task_only',
-                tasks: [{ id: `clarify_${Date.now()}`, title: `Need details: ${qs.questions.join(' • ')}`, summary: transcript, priority: 'MEDIUM', energy: 'MEDIUM', estimateMin: null }],
-                calendarEvents: [],
-                confidence: 0.5
-              }
-            }
-          }
-        } catch (clarifyError) {
-          console.error('VoiceCalendarIntegration: Clarification request failed:', clarifyError)
+      
+      // ALWAYS ask for clarification if confidence is low or if the input seems vague
+      const isVague = this.isInputVague(transcript)
+      const needsClarification = result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0
+      
+      if (needsClarification) {
+        console.log('VoiceCalendarIntegration: Input needs clarification - confidence:', result.confidence, 'isVague:', isVague)
+        
+        // Generate clarifying questions
+        const questions = this.generateClarifyingQuestions(transcript, result)
+        
+        return {
+          intent: 'needs_clarification',
+          tasks: [{
+            id: `clarify_${Date.now()}`,
+            title: '❓ Need more details',
+            summary: `Original request: "${transcript}"\n\nPlease provide more specific details.`,
+            priority: 'MEDIUM',
+            energy: 'LOW',
+            estimateMin: 5,
+            dueAt: null,
+            isRepeatable: false
+          }],
+          calendarEvents: [],
+          clarifyingQuestions: questions,
+          confidence: Math.min(result.confidence || 0.3, 0.4)
         }
       }
 
@@ -447,6 +453,60 @@ Voice input: "${transcript}"`;
     }
 
     return events
+  }
+
+  private isInputVague(transcript: string): boolean {
+    const lower = transcript.toLowerCase()
+    
+    // Check for vague patterns
+    const vaguePatterns = [
+      /every\s+week(?!\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday))/i,
+      /every\s+weekend(?!\s+at\s+\d)/i,
+      /sometime\s+this\s+week/i,
+      /on\s+a\s+day\s+during\s+the\s+week/i,
+      /later/i,
+      /regularly/i,
+      /often/i,
+      /sometimes/i
+    ]
+    
+    return vaguePatterns.some(pattern => pattern.test(lower))
+  }
+
+  private generateClarifyingQuestions(transcript: string, result: any): string[] {
+    const lower = transcript.toLowerCase()
+    const questions: string[] = []
+    
+    if (lower.includes('every week') && !lower.includes('monday') && !lower.includes('tuesday') && !lower.includes('wednesday') && !lower.includes('thursday') && !lower.includes('friday') && !lower.includes('saturday') && !lower.includes('sunday')) {
+      questions.push('Which specific day of the week?')
+    }
+    
+    if (lower.includes('every weekend') && !lower.includes('at') && !lower.includes('pm') && !lower.includes('am')) {
+      questions.push('What time on the weekend?')
+      questions.push('Saturday, Sunday, or both days?')
+    }
+    
+    if (lower.includes('sometime this week') || lower.includes('on a day during the week')) {
+      questions.push('Which specific day?')
+      questions.push('What time?')
+    }
+    
+    if (!lower.includes('at') && !lower.includes('pm') && !lower.includes('am') && !lower.includes('morning') && !lower.includes('afternoon') && !lower.includes('evening')) {
+      questions.push('What time?')
+    }
+    
+    if (!lower.includes('where') && !lower.includes('restaurant') && !lower.includes('place') && !lower.includes('location')) {
+      questions.push('Where should this happen?')
+    }
+    
+    // Default questions if none specific
+    if (questions.length === 0) {
+      questions.push('What specific time?')
+      questions.push('Which day(s) of the week?')
+      questions.push('How often should this repeat?')
+    }
+    
+    return questions
   }
 }
 

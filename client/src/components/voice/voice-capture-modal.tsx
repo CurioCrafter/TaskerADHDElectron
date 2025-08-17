@@ -642,23 +642,87 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       AI will analyze your transcript and suggest actionable tasks
                     </p>
                   </div>
-                  <button
-                    onClick={handleShapeIntoTasks}
-                    disabled={isShaping}
-                    className="btn-primary flex items-center space-x-2"
-                  >
-                    {isShaping ? (
-                      <>
-                        <div className="spinner w-4 h-4"></div>
-                        <span>Analyzing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>🎯</span>
-                        <span>Create Tasks</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={async () => {
+                        // Force clarification mode
+                        const openaiKey = localStorage.getItem('openai_api_key')
+                        if (!openaiKey) {
+                          toast.error('OpenAI API key required. Please configure in Settings.')
+                          return
+                        }
+                        
+                        setIsShaping(true)
+                        try {
+                          const cal = new VoiceCalendarIntegration(openaiKey)
+                          const clarifyThreshold = useSettingsStore.getState().voiceSettings?.aiClarifyThreshold ?? 0.4
+                          
+                          // Force clarification by setting a very low threshold
+                          const result = await cal.processVoiceInput(transcript, 0.1)
+                          
+                          if (result.intent === 'needs_clarification') {
+                            setTaskProposals({
+                              tasks: result.tasks.map(task => ({
+                                ...task,
+                                confidence: 0.3
+                              })),
+                              processingTime: Date.now() - Date.now()
+                            })
+                            setShowProposals(true)
+                            toast.success('🤔 Asking for more details...')
+                          } else {
+                            // If it still doesn't need clarification, show the result
+                            setTaskProposals({
+                              tasks: result.tasks.map(task => ({
+                                ...task,
+                                confidence: 0.8
+                              })),
+                              processingTime: Date.now() - Date.now()
+                            })
+                            setShowProposals(true)
+                            toast.success('✅ Tasks generated!')
+                          }
+                        } catch (error) {
+                          console.error('Force clarification failed:', error)
+                          toast.error('Failed to process request')
+                        } finally {
+                          setIsShaping(false)
+                        }
+                      }}
+                      disabled={isShaping}
+                      className="btn-secondary flex items-center space-x-2"
+                      title="Force the AI to ask clarifying questions about your request"
+                    >
+                      {isShaping ? (
+                        <>
+                          <div className="spinner w-4 h-4"></div>
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>❓</span>
+                          <span>Ask for Details</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleShapeIntoTasks}
+                      disabled={isShaping}
+                      className="btn-primary flex items-center space-x-2"
+                    >
+                      {isShaping ? (
+                        <>
+                          <div className="spinner w-4 h-4"></div>
+                          <span>Analyzing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🎯</span>
+                          <span>Create Tasks</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

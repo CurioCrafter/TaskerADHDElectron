@@ -209,6 +209,43 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
                   </div>
                 </div>
               )}
+
+              {/* Clarifying Questions */}
+              {proposals.tasks.some(task => task.title.includes('❓') || task.title.includes('Need more details')) && (
+                <div className="mt-4">
+                  <h3 className="font-medium text-orange-900 dark:text-orange-100 mb-2">
+                    ❓ Clarifying Questions Needed
+                  </h3>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
+                    <p className="text-orange-800 dark:text-orange-200 text-sm mb-3">
+                      The AI needs more specific details to create proper tasks. Please provide:
+                    </p>
+                    <ul className="text-sm text-orange-800 dark:text-orange-200 space-y-2">
+                      {proposals.tasks
+                        .filter(task => task.title.includes('❓') || task.title.includes('Need more details'))
+                        .map(task => (
+                          <li key={task.id} className="flex items-start space-x-2">
+                            <span className="text-orange-600 dark:text-orange-400 mt-0.5">•</span>
+                            <div>
+                              <div className="font-medium">{task.title.replace('❓ Need more details: ', '')}</div>
+                              {task.summary && (
+                                <div className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                                  {task.summary}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                    </ul>
+                    <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded border border-orange-200 dark:border-orange-600">
+                      <p className="text-xs text-orange-700 dark:text-orange-300">
+                        <strong>Tip:</strong> Try being more specific about time, day, location, or frequency. 
+                        For example: "Every Saturday at 6pm" instead of "every weekend"
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Processing Stats */}
@@ -298,17 +335,31 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
                         )}
                         
                         <div className="flex items-center space-x-2">
-                          {/* Confidence Score */}
-                          <span className={`text-xs px-2 py-1 rounded ${getConfidenceColor(task.confidence)}`}>
-                            {Math.round(task.confidence * 100)}%
+                          {/* Repeatable Badge */}
+                          {finalTask.isRepeatable && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200">
+                              🔄 Repeatable
+                            </span>
+                          )}
+                          
+                          {/* Confidence Badge */}
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            (finalTask.confidence || 0) >= 0.8 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200'
+                              : (finalTask.confidence || 0) >= 0.6
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200'
+                          }`}>
+                            {Math.round((finalTask.confidence || 0) * 100)}% confidence
                           </span>
                           
                           {/* Edit Button */}
                           <button
                             onClick={() => setEditingTask(isEditing ? null : task.id)}
-                            className="btn-ghost btn-sm"
+                            className="btn-ghost btn-sm p-1"
+                            title={isEditing ? 'Cancel edit' : 'Edit task'}
                           >
-                            {isEditing ? '✓' : '✏️'}
+                            {isEditing ? '✕' : '✏️'}
                           </button>
                         </div>
                       </div>
