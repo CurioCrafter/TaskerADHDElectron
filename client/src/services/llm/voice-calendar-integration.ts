@@ -409,20 +409,14 @@ Voice input: "${transcript}"`;
           break
         case 'weekly':
           if (daysOfWeek && daysOfWeek.length > 0) {
-            // Handle multiple days (e.g., weekend = Saturday + Sunday)
-            if (daysOfWeek.length > 1 && eventCount === 0) {
-              // For first occurrence, use the first day in the array
-              const firstDay = daysOfWeek[0]
-              const today = currentDate.getDay()
-              if (firstDay > today) {
-                currentDate = addDays(currentDate, firstDay - today)
-              } else {
-                currentDate = addDays(currentDate, (7 - today) + firstDay)
-              }
-            } else if (daysOfWeek.length > 1) {
-              // For subsequent occurrences, cycle through all days
+            if (daysOfWeek.length === 1) {
+              // Single day weekly recurrence - just add 7 days
+              currentDate = addDays(currentDate, 7)
+            } else {
+              // Multiple days (e.g., weekend = Saturday + Sunday)
               const currentDay = currentDate.getDay()
               const currentIndex = daysOfWeek.indexOf(currentDay)
+              
               if (currentIndex !== -1 && currentIndex < daysOfWeek.length - 1) {
                 // Move to next day in the same week
                 const nextDay = daysOfWeek[currentIndex + 1]
@@ -433,11 +427,9 @@ Voice input: "${transcript}"`;
                 const daysUntilNextWeek = (7 - currentDay) + nextWeekFirstDay
                 currentDate = addDays(currentDate, daysUntilNextWeek)
               }
-            } else {
-              // Single day weekly recurrence
-              currentDate = addWeeks(currentDate, interval)
             }
           } else {
+            // No specific days specified, just add weeks
             currentDate = addWeeks(currentDate, interval)
           }
           break

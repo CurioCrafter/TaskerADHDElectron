@@ -104,9 +104,76 @@ export default function CalendarPage() {
     return allTasks.sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
   }
 
+  // Generate recurring task instances for calendar display
+  const generateRecurringInstances = (task: Task & { boardName: string; boardId: string }, startDate: Date, endDate: Date) => {
+    if (!task.isRepeatable || !task.dueAt) return [task]
+    
+    const instances: (Task & { boardName: string; boardId: string })[] = []
+    const baseDate = parseISO(task.dueAt)
+    let currentDate = new Date(baseDate)
+    
+    // Generate instances up to the end date
+    while (currentDate <= endDate) {
+      if (currentDate >= startDate) {
+        instances.push({
+          ...task,
+          dueAt: currentDate.toISOString(),
+          boardName: task.boardName,
+          boardId: task.boardId
+        })
+      }
+      
+      // Calculate next occurrence based on repeat pattern
+      if (task.repeatPattern === 'daily') {
+        currentDate = addDays(currentDate, task.repeatInterval || 1)
+      } else if (task.repeatPattern === 'weekly') {
+        currentDate = addDays(currentDate, 7 * (task.repeatInterval || 1))
+      } else if (task.repeatPattern === 'monthly') {
+        currentDate = addDays(currentDate, 30 * (task.repeatInterval || 1))
+      } else {
+        // Default to weekly if pattern is unclear
+        currentDate = addDays(currentDate, 7)
+      }
+      
+      // Stop if we have a repeat count limit
+      if (task.repeatCount && instances.length >= task.repeatCount) break
+      
+      // Stop if we have a repeat end date
+      if (task.repeatEndDate && currentDate > parseISO(task.repeatEndDate)) break
+    }
+    
+    return instances
+  }
+
+  // Get all tasks including recurring instances for a date range
+  const getAllTasksWithRecurring = (startDate: Date, endDate: Date) => {
+    const baseTasks = getAllTasksWithDates()
+    const allInstances: (Task & { boardName: string; boardId: string })[] = []
+    
+    baseTasks.forEach(task => {
+      if (task.isRepeatable) {
+        const instances = generateRecurringInstances(task, startDate, endDate)
+        allInstances.push(...instances)
+      } else {
+        // Ensure non-recurring tasks have the required properties
+        allInstances.push({
+          ...task,
+          boardName: (task as any).boardName || 'Unknown',
+          boardId: (task as any).boardId || 'unknown'
+        })
+      }
+    })
+    
+    return allInstances.sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
+  }
+
   // Get tasks for a specific date
   const getTasksForDate = (date: Date) => {
-    return getAllTasksWithDates().filter(task => {
+    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
+    const allTasks = getAllTasksWithRecurring(startOfDay, endOfDay)
+    
+    return allTasks.filter(task => {
       const taskDate = parseISO(task.dueAt!)
       return isSameDay(taskDate, date)
     })
@@ -116,8 +183,9 @@ export default function CalendarPage() {
   const getWeekTasks = () => {
     const weekStart = startOfWeek(currentDate)
     const weekEnd = endOfWeek(currentDate)
+    const allTasks = getAllTasksWithRecurring(weekStart, weekEnd)
     
-    return getAllTasksWithDates().filter(task => {
+    return allTasks.filter(task => {
       const taskDate = parseISO(task.dueAt!)
       return taskDate >= weekStart && taskDate <= weekEnd
     })
