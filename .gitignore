@@ -61,6 +61,48 @@ dist-new/
 TaskerADHD-Setup-*.exe
 *.blockmap
 
-# API Keys and secrets
+# API Keys and secrets (Enhanced protection)
 **/api-keys.json
 **/secrets.json
+**/*key*.json
+**/*secret*.json
+**/*token*.json
+.env*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# User data and configurations that might contain sensitive info
+**/user-data/
+**/configs/
+**/private/
+localStorage/
+userData/
+
+# Development databases with potentially sensitive data
+server/prisma/dev.db*
+server/prisma/*.db*
+server/data/
+data/
+
+# Backup files that might contain sensitive data
+*.backup
+*.bak
+*.old
+*_backup*
+
+# Personal/Private directories
+personal/
+private/
+my-data/
+
+# Common locations for API keys in JS/TS projects
+.env.keys
+local.settings.json
+appsettings.local.json
+config.local.*
+
+# Electron user data
+electron-userdata/

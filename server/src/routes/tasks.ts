@@ -3,6 +3,26 @@ import { z } from 'zod';
 import { prisma } from '../index';
 
 const router = express.Router();
+const DEBUG_API = process.env.NODE_ENV === 'development' || process.env.DEBUG_API === 'true'
+
+function apiDebugLog(label: string, data?: any) {
+  if (!DEBUG_API) return
+  try {
+    // Avoid logging secrets
+    const safe = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data
+    console.log(`[API DEBUG] ${label}:`, safe)
+  } catch {
+    console.log(`[API DEBUG] ${label}`)
+  }
+}
+
+// Helper function to transform task data for frontend
+const transformTaskForResponse = (task: any) => {
+  return {
+    ...task,
+    repeatDays: task.repeatDays ? JSON.parse(task.repeatDays) : undefined
+  };
+};
 
 // Validation schemas
 const CreateTaskSchema = z.object({
@@ -15,7 +35,14 @@ const CreateTaskSchema = z.object({
   columnId: z.string().cuid(),
   labels: z.array(z.string()).optional(),
   subtasks: z.array(z.string()).optional(),
-  transcriptId: z.string().cuid().optional()
+  transcriptId: z.string().cuid().optional(),
+  // Repeat fields
+  isRepeatable: z.boolean().optional(),
+  repeatPattern: z.enum(['daily', 'weekly', 'monthly', 'custom']).optional(),
+  repeatInterval: z.number().int().min(1).max(365).optional(),
+  repeatDays: z.array(z.number().int().min(0).max(6)).optional(),
+  repeatEndDate: z.string().datetime().optional(),
+  repeatCount: z.number().int().min(1).max(1000).optional()
 });
 
 const UpdateTaskSchema = z.object({
@@ -25,7 +52,14 @@ const UpdateTaskSchema = z.object({
   energy: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
   dueAt: z.string().datetime().optional(),
   estimateMin: z.number().int().min(1).max(1440).optional(),
-  labels: z.array(z.string()).optional()
+  labels: z.array(z.string()).optional(),
+  // Repeat fields
+  isRepeatable: z.boolean().optional(),
+  repeatPattern: z.enum(['daily', 'weekly', 'monthly', 'custom']).optional(),
+  repeatInterval: z.number().int().min(1).max(365).optional(),
+  repeatDays: z.array(z.number().int().min(0).max(6)).optional(),
+  repeatEndDate: z.string().datetime().optional(),
+  repeatCount: z.number().int().min(1).max(1000).optional()
 });
 
 const MoveTaskSchema = z.object({
@@ -163,8 +197,10 @@ router.get('/', async (req, res) => {
 // POST /api/tasks - Create task
 router.post('/', async (req, res) => {
   try {
+    apiDebugLog('POST /api/tasks incoming body', req.body)
     const data = CreateTaskSchema.parse(req.body);
     const userId = req.user!.id;
+    apiDebugLog('POST /api/tasks user', { userId })
 
     // Get column to verify board access
     const column = await prisma.column.findUnique({
@@ -203,6 +239,13 @@ router.post('/', async (req, res) => {
         columnId: data.columnId,
         createdById: userId,
         transcriptId: data.transcriptId,
+        // Repeat fields
+        isRepeatable: data.isRepeatable || false,
+        repeatPattern: data.repeatPattern,
+        repeatInterval: data.repeatInterval,
+        repeatDays: data.repeatDays ? JSON.stringify(data.repeatDays) : undefined,
+        repeatEndDate: data.repeatEndDate ? new Date(data.repeatEndDate) : undefined,
+        repeatCount: data.repeatCount,
         subtasks: data.subtasks ? {
           create: data.subtasks.map((title, idx) => ({
             title,
@@ -223,6 +266,7 @@ router.post('/', async (req, res) => {
         }
       }
     });
+    apiDebugLog('POST /api/tasks created task', { id: task.id, title: task.title })
 
     // Handle labels if provided
     if (data.labels && data.labels.length > 0) {
@@ -266,12 +310,13 @@ router.post('/', async (req, res) => {
         }
       });
 
-      return res.status(201).json({ task: updatedTask });
+      return res.status(201).json({ task: transformTaskForResponse(updatedTask) });
     }
 
-    res.status(201).json({ task });
+    res.status(201).json({ task: transformTaskForResponse(task) });
   } catch (error) {
     console.error('Create task error:', error);
+    apiDebugLog('POST /api/tasks error', { message: (error as any)?.message, stack: (error as any)?.stack })
     
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
@@ -279,14 +324,14 @@ router.post('/', async (req, res) => {
         details: error.errors 
       });
     }
-    
-    res.status(500).json({ error: 'Failed to create task' });
+    res.status(500).json({ error: 'Failed to create task', details: (error as any)?.message });
   }
 });
 
 // PATCH /api/tasks/:taskId - Update task
 router.patch('/:taskId', async (req, res) => {
   try {
+    apiDebugLog('PATCH /api/tasks/:taskId incoming', { params: req.params, body: req.body })
     const { taskId } = req.params;
     const data = UpdateTaskSchema.parse(req.body);
     const userId = req.user!.id;
@@ -308,14 +353,16 @@ router.patch('/:taskId', async (req, res) => {
     }
 
     // Extract labels from data to handle separately
-    const { labels, ...updateData } = data;
+    const { labels, repeatDays, ...updateData } = data;
     
     // Update task
     const updatedTask = await prisma.task.update({
       where: { id: taskId },
       data: {
         ...updateData,
-        dueAt: updateData.dueAt ? new Date(updateData.dueAt) : undefined
+        dueAt: updateData.dueAt ? new Date(updateData.dueAt) : undefined,
+        repeatEndDate: updateData.repeatEndDate ? new Date(updateData.repeatEndDate) : undefined,
+        repeatDays: repeatDays ? JSON.stringify(repeatDays) : undefined
       },
       include: {
         labels: {
@@ -330,6 +377,7 @@ router.patch('/:taskId', async (req, res) => {
         }
       }
     });
+    apiDebugLog('PATCH /api/tasks/:taskId updated', { id: updatedTask.id })
 
     // Handle labels update
     if (data.labels !== undefined) {
@@ -377,12 +425,13 @@ router.patch('/:taskId', async (req, res) => {
         }
       });
 
-      return res.json({ task: finalTask });
+      return res.json({ task: transformTaskForResponse(finalTask) });
     }
 
-    res.json({ task: updatedTask });
+    res.json({ task: transformTaskForResponse(updatedTask) });
   } catch (error) {
     console.error('Update task error:', error);
+    apiDebugLog('PATCH /api/tasks/:taskId error', { message: (error as any)?.message, stack: (error as any)?.stack })
     
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
@@ -391,7 +440,7 @@ router.patch('/:taskId', async (req, res) => {
       });
     }
     
-    res.status(500).json({ error: 'Failed to update task' });
+    res.status(500).json({ error: 'Failed to update task', details: (error as any)?.message });
   }
 });
 

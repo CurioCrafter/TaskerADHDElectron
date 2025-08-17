@@ -40,6 +40,13 @@ interface BoardState {
     estimateMin?: number
     labels?: string[]
     columnId?: string
+    // Repeat data
+    isRepeatable?: boolean
+    repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+    repeatInterval?: number
+    repeatDays?: number[]
+    repeatEndDate?: string
+    repeatCount?: number
   }) => Promise<Task | null>
   moveTask: (taskId: string, columnId: string, position: number) => Promise<void>
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
@@ -78,12 +85,15 @@ export const useBoardStore = create<BoardState>()(
 
           if (response.ok) {
             const data = await response.json()
-            set({ boards: data.boards, isLoading: false })
-            
-            // Set a default board as current if none selected
-            // Prefer personal/main boards over projects for the main dashboard
-            if (data.boards.length > 0 && !get().currentBoard) {
-              const defaultBoard = data.boards.find((b: any) => b.type !== 'PROJECT') || data.boards[0]
+            const fetchedBoards: Board[] = data.boards || []
+            set({ boards: fetchedBoards, isLoading: false })
+
+            // Reconcile persisted currentBoard with freshly fetched boards
+            const { currentBoard } = get()
+            const found = currentBoard ? fetchedBoards.find(b => b.id === currentBoard.id) : null
+
+            if (fetchedBoards.length > 0 && (!currentBoard || !found)) {
+              const defaultBoard = fetchedBoards.find((b: any) => b.type !== 'PROJECT') || fetchedBoards[0]
               set({ currentBoard: defaultBoard })
             }
           } else {
@@ -237,45 +247,86 @@ export const useBoardStore = create<BoardState>()(
       // Create task
       createTask: async (taskData) => {
         const { currentBoard } = get()
-        if (!currentBoard) return null
+        if (!currentBoard) {
+          console.error('🚨 No current board selected')
+          return null
+        }
 
+        console.log('🔧 [STORE] Creating task:', taskData)
+        console.log('🔧 [STORE] Current board:', { id: currentBoard.id, name: currentBoard.name })
         set({ isLoading: true, error: null })
 
         try {
           // Use first column (Inbox) if no column specified
           const columnId = taskData.columnId || currentBoard.columns[0]?.id
           if (!columnId) {
+            console.error('🚨 No columns available on board:', currentBoard.name)
             set({ error: 'No columns available', isLoading: false })
             return null
           }
 
+          console.log('🔧 [STORE] Using column ID:', columnId)
+          console.log('🔧 [STORE] Available columns:', currentBoard.columns.map(c => ({ id: c.id, name: c.name })))
+
           const authHeaders = getAuthHeaders()
+          console.log('🔧 [STORE] Auth headers:', authHeaders)
+          console.log('🔧 [STORE] API URL:', API_URL)
+          
+          const requestPayload = {
+            ...taskData,
+            columnId
+          }
+          console.log('🔧 [STORE] Request payload:', requestPayload)
+
           const response = await fetch(`${API_URL}/api/tasks`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...authHeaders
             },
-            body: JSON.stringify({
-              ...taskData,
-              columnId
-            })
+            body: JSON.stringify(requestPayload)
           })
+
+          console.log('🔧 [STORE] Response status:', response.status)
+          console.log('🔧 [STORE] Response ok:', response.ok)
 
           if (response.ok) {
             const data = await response.json()
+            console.log('✅ [STORE] Task creation API success:', data)
+            console.log('✅ [STORE] Created task:', { id: data.task?.id, title: data.task?.title })
             
-            // Refresh current board to get updated tasks
+            // Force refresh current board to get updated tasks
+            console.log('🔄 [STORE] Refreshing board to show new task...')
             await get().fetchBoard(currentBoard.id)
+            console.log('🔄 [STORE] Board refresh completed')
             set({ isLoading: false })
             
             return data.task
           } else {
-            const error = await response.json()
-            set({ error: error.error || 'Failed to create task', isLoading: false })
+            let errorText = 'Failed to create task'
+            try {
+              const errorData = await response.json()
+              console.error('❌ [STORE] Task creation API error:', response.status, errorData)
+              errorText = errorData.error || errorText
+              // Auto-reconcile if column mismatch occurs (e.g., dev DB recreated)
+              if (errorText.includes('Column not found')) {
+                console.warn('⚠️ [STORE] Column not found. Reconciling boards/state and retrying fetch...')
+                await get().fetchBoards()
+              }
+            } catch (e) {
+              console.error('❌ [STORE] Task creation API error (no JSON body):', response.status)
+            }
+            set({ error: errorText, isLoading: false })
             return null
           }
         } catch (error) {
+          console.error('❌ [STORE] Task creation network error:', error)
+          console.error('❌ [STORE] Error details:', {
+            message: error?.message,
+            stack: error?.stack,
+            taskData,
+            boardId: currentBoard?.id
+          })
           set({ error: 'Network error', isLoading: false })
           return null
         }
@@ -335,8 +386,15 @@ export const useBoardStore = create<BoardState>()(
             }
             set({ isLoading: false })
           } else {
-            const error = await response.json()
-            set({ error: error.error || 'Failed to update task', isLoading: false })
+            let errText = 'Failed to update task'
+            try {
+              const error = await response.json()
+              errText = error.error || errText
+              console.error('❌ [STORE] Task update API error:', response.status, error)
+            } catch (e) {
+              console.error('❌ [STORE] Task update API error (no JSON body):', response.status)
+            }
+            set({ error: errText, isLoading: false })
           }
         } catch (error) {
           set({ error: 'Network error', isLoading: false })
@@ -365,8 +423,15 @@ export const useBoardStore = create<BoardState>()(
             }
             set({ isLoading: false })
           } else {
-            const error = await response.json()
-            set({ error: error.error || 'Failed to delete task', isLoading: false })
+            let errText = 'Failed to delete task'
+            try {
+              const error = await response.json()
+              errText = error.error || errText
+              console.error('❌ [STORE] Task delete API error:', response.status, error)
+            } catch (e) {
+              console.error('❌ [STORE] Task delete API error (no JSON body):', response.status)
+            }
+            set({ error: errText, isLoading: false })
           }
         } catch (error) {
           set({ error: 'Network error', isLoading: false })

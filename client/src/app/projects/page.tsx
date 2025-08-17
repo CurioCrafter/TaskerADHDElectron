@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { useBoardStore } from '@/stores/board'
+import { useSettingsStore } from '@/stores/settings'
+import { AppLayout } from '@/components/layout/app-layout'
 import type { Board, BoardType, BoardPriority, BoardStatus } from '@/types'
 
 // Project Templates
@@ -94,11 +96,27 @@ const PROJECT_TEMPLATES: ProjectTemplate[] = [
 
 export default function ProjectsPage() {
   const router = useRouter()
-  const { boards, fetchBoards, createBoard, deleteBoard, isLoading } = useBoardStore()
+  const { boards, fetchBoards, createBoard, updateBoard, deleteBoard, isLoading } = useBoardStore()
+  const { debugMode } = useSettingsStore()
   const [activeTab, setActiveTab] = useState<'overview' | 'templates' | 'analytics'>('overview')
+  
+  // Only log in debug mode (client-side only)
+  useEffect(() => {
+    if (debugMode) {
+      console.log('🔧 [PROJECTS] Projects page component loading...')
+    }
+  }, [debugMode])
+  
+  // Debug logging only when debug mode is enabled
+  useEffect(() => {
+    if (debugMode) {
+      console.log('📁 [PROJECTS] Projects page loaded')
+    }
+  }, [debugMode])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null)
+  const [editingProject, setEditingProject] = useState<Board | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -267,31 +285,29 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Boards & Projects</h1>
-              <p className="mt-1 text-gray-600 dark:text-gray-400">
-                Manage all your boards, from personal task lists to complex project workflows
-              </p>
-            </div>
-            <div className="mt-4 sm:mt-0 flex space-x-3">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="btn-primary"
-              >
-                + New Board
-              </button>
-              <button
-                onClick={() => setShowTemplateModal(true)}
-                className="btn-secondary"
-              >
-                📋 Templates
-              </button>
-            </div>
+    <AppLayout title="Boards & Projects">
+      <div className="p-6">
+        {/* Action Bar */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <p className="text-gray-600 dark:text-gray-400">
+              Manage all your boards, from personal task lists to complex project workflows
+            </p>
+          </div>
+          
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary"
+            >
+              + New Board
+            </button>
+            <button
+              onClick={() => setShowTemplateModal(true)}
+              className="btn-secondary"
+            >
+              📋 Templates
+            </button>
           </div>
         </div>
 
@@ -411,15 +427,28 @@ export default function ProjectsPage() {
                               </p>
                             )}
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteProject(project.id, project.name)
-                            }}
-                            className="text-gray-400 hover:text-red-500 transition-colors"
-                          >
-                            ✕
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingProject(project)
+                              }}
+                              className="text-gray-400 hover:text-blue-500 transition-colors"
+                              title="Edit project"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteProject(project.id, project.name)
+                              }}
+                              className="text-gray-400 hover:text-red-500 transition-colors"
+                              title="Delete project"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
 
                         {/* Status and Priority */}
@@ -842,6 +871,110 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Edit {editingProject.type === 'PROJECT' ? 'Project' : 'Board'}
+              </h2>
+              <button 
+                onClick={() => setEditingProject(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              const formData = new FormData(e.currentTarget)
+              const updates = {
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                priority: formData.get('priority') as BoardPriority,
+                status: formData.get('status') as BoardStatus,
+              }
+              
+              try {
+                await updateBoard(editingProject.id, updates)
+                await fetchBoards()
+                setEditingProject(null)
+                toast.success(`${editingProject.type === 'PROJECT' ? 'Project' : 'Board'} updated successfully!`)
+              } catch (error) {
+                toast.error('Failed to update project')
+              }
+            }} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Name
+                </label>
+                <input
+                  name="name"
+                  type="text"
+                  defaultValue={editingProject.name}
+                  className="input w-full"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  defaultValue={editingProject.description || ''}
+                  className="input w-full h-20 resize-none"
+                  placeholder="Optional description..."
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Priority
+                  </label>
+                  <select name="priority" defaultValue={editingProject.priority} className="input w-full text-sm">
+                    <option value="LOW">Low Priority</option>
+                    <option value="MEDIUM">Medium Priority</option>
+                    <option value="HIGH">High Priority</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Status
+                  </label>
+                  <select name="status" defaultValue={editingProject.status} className="input w-full text-sm">
+                    <option value="PLANNING">Planning</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="ON_HOLD">On Hold</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="ARCHIVED">Archived</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="btn-ghost"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </AppLayout>
   )
 }

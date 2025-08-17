@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { UserSettings, EnergyLevel, TaskPriority } from '@/types'
 
 interface SettingsState extends UserSettings {
+  // Debug mode
+  debugMode: boolean
+  toggleDebugMode: () => void
+  
   // Actions
   updateSettings: (settings: Partial<UserSettings>) => void
   resetSettings: () => void
@@ -37,6 +41,25 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       // Initialize with default settings
       ...defaultSettings,
+      
+      // Debug mode - separate from user settings, defaults to false
+      debugMode: false,
+
+      // Toggle debug mode
+      toggleDebugMode: () => {
+        set((state) => {
+          const newDebugMode = !state.debugMode
+          // Also sync with localStorage for backward compatibility
+          if (typeof window !== 'undefined') {
+            if (newDebugMode) {
+              window.localStorage.setItem('debugMode', 'true')
+            } else {
+              window.localStorage.removeItem('debugMode')
+            }
+          }
+          return { debugMode: newDebugMode }
+        })
+      },
 
       // Update settings
       updateSettings: (newSettings: Partial<UserSettings>) => {
@@ -150,6 +173,11 @@ export const getVoiceSettings = () => {
 
 export const getTaskPreferences = () => {
   return useSettingsStore.getState().taskPreferences || defaultSettings.taskPreferences
+}
+
+export const isDebugMode = () => {
+  if (typeof window === 'undefined') return false // SSR safe
+  return useSettingsStore.getState().debugMode || false
 }
 
 // Apply settings to DOM

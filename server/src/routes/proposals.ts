@@ -122,20 +122,44 @@ router.post('/:id/accept', async (req, res) => {
       return res.status(404).json({ error: 'Board not found' });
     }
 
+    console.log(`📋 Processing ${tasks.length} tasks for proposal ${id}`);
+    console.log('📋 Available columns:', board.columns.map(c => ({ id: c.id, name: c.name })));
+    
     // Create tasks in a transaction
     const createdTasks = await prisma.$transaction(async (tx) => {
       const taskResults = [];
 
-      for (const taskData of tasks) {
-        // Determine target column
-        let targetColumnId = taskData.columnId;
+      for (const [index, taskData] of tasks.entries()) {
+        console.log(`📋 Processing task ${index + 1}:`, { 
+          title: taskData.title, 
+          columnName: (taskData as any).columnName,
+          priority: taskData.priority 
+        });
+        
+        // Determine target column by name (AI-suggested) or fallback to first column
+        let targetColumnId: string | undefined;
+        const suggestedColumnName = (taskData as any).columnName;
+        
+        if (suggestedColumnName) {
+          const targetColumn = board.columns.find(col => 
+            col.name.toLowerCase() === suggestedColumnName.toLowerCase()
+          );
+          if (targetColumn) {
+            targetColumnId = targetColumn.id;
+            console.log(`📋 ✅ Found column "${suggestedColumnName}" with ID ${targetColumnId}`);
+          } else {
+            console.log(`📋 ⚠️ Column "${suggestedColumnName}" not found, using fallback`);
+          }
+        }
+        
+        // Fallback to first column if no match found
         if (!targetColumnId) {
-          // Use first column (usually "Inbox")
           targetColumnId = board.columns[0]?.id;
+          console.log(`📋 Using fallback column: ${board.columns[0]?.name} (${targetColumnId})`);
         }
 
         if (!targetColumnId) {
-          throw new Error('No valid column found for task');
+          throw new Error(`No valid column found for task "${taskData.title}"`);
         }
 
         // Get next position in column
@@ -145,34 +169,56 @@ router.post('/:id/accept', async (req, res) => {
         });
         const position = (lastTask?.position ?? -1) + 1;
 
+        // Prepare task data with calendar integration
+        const taskCreateData = {
+          title: taskData.title,
+          summary: taskData.summary,
+          priority: taskData.priority,
+          energy: taskData.energy,
+          dueAt: taskData.dueAt ? new Date(taskData.dueAt) : undefined,
+          estimateMin: taskData.estimateMin,
+          position,
+          boardId,
+          columnId: targetColumnId,
+          createdById: userId,
+          transcriptId: proposal.transcript.id,
+          subtasks: taskData.subtasks ? {
+            create: taskData.subtasks.map((title, idx) => ({
+              title,
+              position: idx
+            }))
+          } : undefined
+        };
+
+        console.log(`📋 Creating task in column ${targetColumnId}:`, {
+          title: taskCreateData.title,
+          columnId: taskCreateData.columnId,
+          boardId: taskCreateData.boardId,
+          dueAt: taskCreateData.dueAt
+        });
+
         // Create task
         const task = await tx.task.create({
-          data: {
-            title: taskData.title,
-            summary: taskData.summary,
-            priority: taskData.priority,
-            energy: taskData.energy,
-            dueAt: taskData.dueAt ? new Date(taskData.dueAt) : undefined,
-            estimateMin: taskData.estimateMin,
-            position,
-            boardId,
-            columnId: targetColumnId,
-            createdById: userId,
-            transcriptId: proposal.transcript.id,
-            subtasks: taskData.subtasks ? {
-              create: taskData.subtasks.map((title, idx) => ({
-                title,
-                position: idx
-              }))
-            } : undefined
-          },
+          data: taskCreateData,
           include: {
             subtasks: {
               orderBy: {
                 position: 'asc'
               }
+            },
+            column: {
+              select: {
+                id: true,
+                name: true
+              }
             }
           }
+        });
+
+        console.log(`📋 ✅ Task created successfully:`, { 
+          id: task.id, 
+          title: task.title, 
+          columnName: task.column.name 
         });
 
         // Handle labels
@@ -213,7 +259,9 @@ router.post('/:id/accept', async (req, res) => {
       return taskResults;
     });
 
-    // Fetch updated tasks with labels
+    console.log(`📋 ✅ Transaction completed. Created ${createdTasks.length} tasks successfully!`);
+
+    // Fetch updated tasks with labels and column information
     const tasksWithLabels = await Promise.all(
       createdTasks.map(task => 
         prisma.task.findUnique({
@@ -228,31 +276,83 @@ router.post('/:id/accept', async (req, res) => {
               orderBy: {
                 position: 'asc'
               }
+            },
+            column: {
+              select: {
+                id: true,
+                name: true
+              }
             }
           }
         })
       )
     );
 
+    // Log final task placement for debugging
+    tasksWithLabels.forEach((task, index) => {
+      console.log(`📋 Final task ${index + 1}: "${task?.title}" → Column: ${task?.column.name}`);
+    });
+
     res.json({ 
-      message: 'Proposal accepted and tasks created',
+      message: `Proposal accepted and ${createdTasks.length} tasks created successfully!`,
       tasks: tasksWithLabels,
       proposal: {
         ...proposal,
         status: 'ACCEPTED'
+      },
+      debug: {
+        totalTasks: createdTasks.length,
+        columnPlacements: tasksWithLabels.map(task => ({
+          title: task?.title,
+          column: task?.column.name
+        }))
       }
     });
   } catch (error) {
-    console.error('Accept proposal error:', error);
+    console.error('📋 ❌ Accept proposal error:', error);
     
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: 'Invalid task data',
-        details: error.errors 
+    // Enhanced error logging for debugging
+    if (error instanceof Error) {
+      console.error('📋 Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.split('\n').slice(0, 5).join('\n')
       });
     }
     
-    res.status(500).json({ error: 'Failed to accept proposal' });
+    if (error instanceof z.ZodError) {
+      console.error('📋 Validation error details:', error.errors);
+      return res.status(400).json({ 
+        error: 'Invalid task data',
+        details: error.errors,
+        debug: 'Check console for detailed validation errors'
+      });
+    }
+    
+    // Check for database constraint errors
+    if (error instanceof Error) {
+      if (error.message.includes('Column not found') || error.message.includes('columnId')) {
+        return res.status(400).json({ 
+          error: 'Column assignment error',
+          message: error.message,
+          debug: 'The AI tried to assign tasks to columns that don\'t exist on this board. Check console logs for details.'
+        });
+      }
+      
+      if (error.message.includes('foreign key constraint')) {
+        return res.status(400).json({ 
+          error: 'Database constraint error',
+          message: 'Invalid board or column reference',
+          debug: error.message
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to accept proposal',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      debug: 'Check server console for detailed error information'
+    });
   }
 });
 

@@ -12,6 +12,7 @@ import boardRoutes from './routes/boards';
 import taskRoutes from './routes/tasks';
 import voiceRoutes from './routes/voice';
 import proposalRoutes from './routes/proposals';
+import calendarRoutes from './routes/calendar';
 
 // Import middleware
 import { authenticateToken } from './middleware/auth';
@@ -34,7 +35,11 @@ const io = new SocketIOServer(server, {
 ;(global as any).socketIO = io;
 
 // Initialize Prisma
-export const prisma = new PrismaClient();
+export const prisma = new PrismaClient({
+  log: process.env.PRISMA_DEBUG === 'true'
+    ? ['query', 'info', 'warn', 'error']
+    : ['info', 'warn', 'error']
+});
 
 // Middleware
 app.use(cors({
@@ -44,6 +49,23 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Lightweight API request logging (dev/debug only)
+const ENABLE_API_LOG = process.env.NODE_ENV === 'development' || process.env.API_DEBUG === 'true'
+if (ENABLE_API_LOG) {
+  app.use((req, res, next) => {
+    const start = Date.now()
+    const id = Math.random().toString(36).slice(2, 8)
+    const path = req.originalUrl
+    console.log(`[API] ▶ ${id} ${req.method} ${path}`)
+    res.on('finish', () => {
+      const ms = Date.now() - start
+      const status = res.statusCode
+      console.log(`[API] ◀ ${id} ${req.method} ${path} -> ${status} in ${ms}ms`)
+    })
+    next()
+  })
+}
 
 // Rate limiting
 const limiter = rateLimit({
@@ -67,6 +89,7 @@ app.use('/api/boards', authenticateToken, boardRoutes);
 app.use('/api/tasks', authenticateToken, taskRoutes);
 app.use('/api/voice', authenticateToken, voiceRoutes);
 app.use('/api/proposals', authenticateToken, proposalRoutes);
+app.use('/api/calendar', authenticateToken, calendarRoutes);
 
 // Socket.IO setup
 io.use(async (socket, next) => {
@@ -137,13 +160,21 @@ async function gracefulShutdown(signal: string) {
 	console.log(`${signal} received, shutting down gracefully`);
 	
 	try {
-		// Close Redis connections and workers
+		// Close Redis connections and workers (optional if Redis is disabled)
 		const { redis, shapingWorker } = await import('./services/queue');
-		console.log('Closing queue workers...');
-		await shapingWorker.close();
-		console.log('Closing Redis connection...');
-		await redis.quit();
-		console.log('✅ Queue services shut down');
+		if (shapingWorker) {
+			console.log('Closing queue workers...');
+			await shapingWorker.close();
+		} else {
+			console.log('Queue worker not initialized, skipping.');
+		}
+		if (redis) {
+			console.log('Closing Redis connection...');
+			await redis.quit();
+		} else {
+			console.log('Redis not configured, skipping.');
+		}
+		console.log('✅ Queue services shut down (if enabled)');
 	} catch (error) {
 		console.error('Error shutting down queue services:', error);
 	}

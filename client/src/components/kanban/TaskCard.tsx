@@ -1,11 +1,12 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useDrag } from 'react-dnd'
 import type { Task } from '@/types'
 import { clsx } from 'clsx'
 import { useBoardStore } from '@/stores/board'
 import { toast } from 'react-hot-toast'
+import { TaskEditModal } from '@/components/ui/task-edit-modal'
 
 export interface DragTaskItem {
   type: 'task'
@@ -21,6 +22,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
   const { deleteTask } = useBoardStore()
+  const [isEditOpen, setIsEditOpen] = useState(false)
   
   const [{ isDragging }, drag] = useDrag(
     () => ({
@@ -78,14 +80,32 @@ export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
               {task.priority.toLowerCase()}
             </span>
           )}
-          <button
-            onClick={handleDelete}
-            className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label={`Delete task ${task.title}`}
-            title="Delete task"
-          >
-            ✕
-          </button>
+          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsEditOpen(true)
+                toast('Editing task…', { duration: 1200 })
+              }}
+              className="text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 p-1 rounded"
+              title="Edit task"
+            >
+              ✏️
+            </button>
+            {task.isRepeatable && (
+              <span className="text-xs text-blue-500" title="Repeating task">
+                🔄
+              </span>
+            )}
+            <button
+              onClick={handleDelete}
+              className="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 p-1 rounded"
+              aria-label={`Delete task ${task.title}`}
+              title="Delete task"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </div>
 
@@ -125,6 +145,13 @@ export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
           )}
         </div>
       )}
+
+      {/* Edit Modal */}
+      <TaskEditModal
+        isOpen={isEditOpen}
+        task={task}
+        onClose={() => setIsEditOpen(false)}
+      />
     </div>
   )
 }

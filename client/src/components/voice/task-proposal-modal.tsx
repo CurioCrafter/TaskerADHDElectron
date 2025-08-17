@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import type { TaskProposal, TaskShapingResult } from '@/services/llm/task-shaper'
 import { useBoardStore } from '@/stores/board'
+import { useStagingStore } from '@/stores/staging'
 
 interface TaskProposalModalProps {
   isOpen: boolean
@@ -18,7 +19,8 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
   const [editedTasks, setEditedTasks] = useState<Map<string, Partial<TaskProposal>>>(new Map())
   const [isCreating, setIsCreating] = useState(false)
   
-  const { createTask } = useBoardStore()
+  const { currentBoard } = useBoardStore()
+  const { addToStaging } = useStagingStore()
 
   // Select all tasks by default
   useEffect(() => {
@@ -59,6 +61,11 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
       return
     }
 
+    if (!currentBoard) {
+      toast.error('No board selected')
+      return
+    }
+
     setIsCreating(true)
     let successCount = 0
 
@@ -67,31 +74,44 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
         const finalTask = getTaskData(task)
         
         try {
-          await createTask({
+          // Send tasks to staging for intelligent processing
+          addToStaging({
             title: finalTask.title,
             summary: finalTask.summary,
             priority: finalTask.priority,
             energy: finalTask.energy,
             dueAt: finalTask.dueAt,
             estimateMin: finalTask.estimateMin,
-            labels: finalTask.labels
+            labels: finalTask.labels || [],
+            subtasks: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            position: 0,
+            
+            // Staging-specific metadata
+            source: 'voice',
+            confidence: finalTask.confidence || 0.8,
+            suggestedImprovements: [],
+            relatedTasks: [],
+            suggestedLabels: finalTask.labels || []
           })
           successCount++
         } catch (error) {
-          console.error('Failed to create task:', finalTask.title, error)
+          console.error('Failed to stage task:', finalTask.title, error)
         }
       }
 
       if (successCount > 0) {
-        toast.success(`✅ Created ${successCount} task${successCount > 1 ? 's' : ''} successfully!`)
+        toast.success(`📥 Sent ${successCount} task${successCount > 1 ? 's' : ''} to staging for review!`)
+        toast('💡 Check the Staging area to review and approve your tasks', { duration: 4000 })
         onClose()
       } else {
-        toast.error('Failed to create any tasks')
+        toast.error('Failed to stage any tasks')
       }
 
     } catch (error) {
-      console.error('Task creation error:', error)
-      toast.error('Failed to create tasks')
+      console.error('Task staging error:', error)
+      toast.error('Failed to stage tasks')
     } finally {
       setIsCreating(false)
     }

@@ -4,16 +4,13 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth'
 import { useBoardStore } from '@/stores/board'
-import { useSettingsStore } from '@/stores/settings'
 import { LoadingPage } from '@/components/ui/loading'
 import { TaskForm } from '@/components/ui/task-form'
 import { VoiceCaptureModal } from '@/components/voice/voice-capture-modal'
 import { OpenAIChat } from '@/components/chat/openai-chat'
-import { SmartStagingArea } from '@/components/staging/smart-staging-area'
-import { EnergyDashboard } from '@/components/energy/energy-dashboard'
+import { StagingArea } from '@/components/inbox/staging-area'
 import { EnergyFilter } from '@/components/filters/energy-filter'
 import { AppLayout } from '@/components/layout/app-layout'
-import { DebugToggle } from '@/components/debug-toggle'
 import { toast } from 'react-hot-toast'
 import { Column as KanbanColumn } from '@/components/kanban/Column'
 
@@ -40,39 +37,14 @@ export default function DashboardPage() {
   const [showVoiceCapture, setShowVoiceCapture] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [showStaging, setShowStaging] = useState(false)
-  const [showEnergyDashboard, setShowEnergyDashboard] = useState(true) // Always on by default
   const [showEnergyFilter, setShowEnergyFilter] = useState(false)
   const [filteredTasks, setFilteredTasks] = useState<any[]>([])
   const [isFiltered, setIsFiltered] = useState(false)
-  
-  // Get debug state from settings store
-  const { debugMode } = useSettingsStore()
-  
-  useEffect(() => {
-    if (debugMode) {
-      console.log('🔧 [DASHBOARD] Dashboard loaded')
-      toast('📋 Dashboard loaded', { duration: 2000, icon: '✅' })
-    }
-  }, [debugMode])
 
-  // Load boards on mount and ensure a default board exists in dev
+  // Load boards on mount
   useEffect(() => {
-    (async () => {
-      await fetchBoards()
-    })()
+    fetchBoards()
   }, [fetchBoards])
-
-  // Debug: Log current board changes
-  useEffect(() => {
-    if (currentBoard && debugMode) {
-      console.log('🔧 Current board updated:', currentBoard.name)
-      console.log('🔧 Board columns:', currentBoard.columns?.map(c => ({ 
-        name: c.name, 
-        taskCount: c.tasks?.length || 0 
-      })))
-      console.log('🔧 Total tasks on board:', currentBoard.columns?.reduce((total, col) => total + (col.tasks?.length || 0), 0))
-    }
-  }, [currentBoard, debugMode])
 
   // Handle URL board parameter when boards are loaded
   useEffect(() => {
@@ -97,24 +69,7 @@ export default function DashboardPage() {
   }, [isAuthenticated, isLoading, router])
 
   // Handle task creation
-  const handleCreateTask = async (taskData: {
-    title: string
-    summary?: string
-    priority?: TaskPriority
-    energy?: EnergyLevel
-    dueAt?: string
-    estimateMin?: number
-    labels?: string[]
-    // Repeat data
-    isRepeatable?: boolean
-    repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
-    repeatInterval?: number
-    repeatDays?: number[]
-    repeatEndDate?: string
-    repeatCount?: number
-  }) => {
-    if (debugMode) console.log('🔧 [DASHBOARD] Creating task:', taskData)
-    
+  const handleCreateTask = async (taskData: any) => {
     if (!currentBoard) {
       toast.error('No board selected')
       return
@@ -122,110 +77,47 @@ export default function DashboardPage() {
 
     setIsCreatingTask(true)
     try {
-      const task = await createTask(taskData)
-      if (task) {
-        toast.success('Task created successfully!')
+      const success = await createTask(taskData, currentBoard.id)
+      if (success) {
+        toast.success('Task created!')
         setShowTaskForm(false)
-        // Refresh board to show new task
-        await fetchBoard(currentBoard.id)
       } else {
         toast.error('Failed to create task')
       }
     } catch (error) {
-      console.error('Task creation error:', error)
-      toast.error(`Failed to create task: ${error?.message || error}`)
+      toast.error('Something went wrong')
     } finally {
       setIsCreatingTask(false)
     }
   }
 
   const getTodaysTasks = () => {
-    try {
-      if (!currentBoard || !currentBoard.columns || !Array.isArray(currentBoard.columns)) {
-        console.warn('⚠️ getTodaysTasks: Invalid board or columns data', { currentBoard })
-        return []
-      }
-      
-      const tasks = currentBoard.columns
-        .filter(col => {
-          if (!col || !col.tasks || !Array.isArray(col.tasks)) {
-            console.warn('⚠️ getTodaysTasks: Invalid column data', { col })
-            return false
-          }
-          return true
-        })
-        .flatMap(col => col.tasks || [])
-        .filter(task => {
-          if (!task || !task.title) {
-            console.warn('⚠️ getTodaysTasks: Invalid task data', { task })
-            return false
-          }
-          
-          try {
-            // Today's tasks: due today, urgent priority, or in "Doing" column
-            const today = new Date().toDateString()
-            const taskDue = task.dueAt ? new Date(task.dueAt).toDateString() : null
-            const isDueToday = taskDue === today
-            const isUrgent = task.priority === 'URGENT'
-            const isInProgress = task.column?.name === 'Doing'
-            
-            return isDueToday || isUrgent || isInProgress
-          } catch (dateError) {
-            console.error('🚨 Error processing task date:', dateError, { task })
-            handleError(dateError as Error, 'getTodaysTasks date processing')
-            return false
-          }
-        })
-        .slice(0, 7) // ADHD-friendly limit
+    if (!currentBoard || !currentBoard.columns) return []
+    
+    return currentBoard.columns
+      .filter(col => col && col.tasks)
+      .flatMap(col => col.tasks || [])
+      .filter(task => {
+        // Today's tasks: due today, urgent priority, or in "Doing" column
+        const today = new Date().toDateString()
+        const taskDue = task.dueAt ? new Date(task.dueAt).toDateString() : null
+        const isDueToday = taskDue === today
+        const isUrgent = task.priority === 'URGENT'
+        const isInProgress = task.column?.name === 'Doing'
         
-      console.log('✅ getTodaysTasks successful:', tasks.length, 'tasks')
-      return tasks
-    } catch (error) {
-      console.error('🚨 Error in getTodaysTasks:', error)
-      handleError(error as Error, 'getTodaysTasks')
-      return []
-    }
+        return isDueToday || isUrgent || isInProgress
+      })
+      .slice(0, 7) // ADHD-friendly limit
   }
 
   const getQuickWins = () => {
-    try {
-      if (!currentBoard || !currentBoard.columns || !Array.isArray(currentBoard.columns)) {
-        console.warn('⚠️ getQuickWins: Invalid board or columns data', { currentBoard })
-        return []
-      }
-      
-      const quickWins = currentBoard.columns
-        .filter(col => {
-          if (!col || !col.tasks || !Array.isArray(col.tasks)) {
-            console.warn('⚠️ getQuickWins: Invalid column data', { col })
-            return false
-          }
-          return true
-        })
-        .flatMap(col => col.tasks || [])
-        .filter(task => {
-          if (!task || !task.title) {
-            console.warn('⚠️ getQuickWins: Invalid task data', { task })
-            return false
-          }
-          
-          try {
-            return task.energy === 'LOW' && (task.estimateMin || 0) <= 30
-          } catch (taskError) {
-            console.error('🚨 Error processing quick win task:', taskError, { task })
-            handleError(taskError as Error, 'getQuickWins task processing')
-            return false
-          }
-        })
-        .slice(0, 5)
-        
-      console.log('✅ getQuickWins successful:', quickWins.length, 'quick wins')
-      return quickWins
-    } catch (error) {
-      console.error('🚨 Error in getQuickWins:', error)
-      handleError(error as Error, 'getQuickWins')
-      return []
-    }
+    if (!currentBoard || !currentBoard.columns) return []
+    
+    return currentBoard.columns
+      .filter(col => col && col.tasks)
+      .flatMap(col => col.tasks || [])
+      .filter(task => task.energy === 'LOW' && (task.estimateMin || 0) <= 30)
+      .slice(0, 5)
   }
 
   if (isLoading) return <LoadingPage title="Loading..." />
@@ -237,7 +129,7 @@ export default function DashboardPage() {
 
   return (
     <AppLayout title="Dashboard">
-        <div className="p-6">
+      <div className="p-6">
         {/* Action Bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           {/* Board Selector */}
@@ -254,10 +146,17 @@ export default function DashboardPage() {
                       setCurrentBoard(selectedBoard)
                       router.push(`/dashboard?board=${selectedBoardId}`)
                     }
+                  } else {
+                    const defaultBoard = boards.find(b => b.type !== 'PROJECT') || boards[0]
+                    if (defaultBoard) {
+                      setCurrentBoard(defaultBoard)
+                    }
+                    router.push('/dashboard')
                   }
                 }}
                 className="input text-sm min-w-[200px]"
               >
+                <option value="">Select Board</option>
                 {boards.filter(board => board && board.id && board.name).map(board => (
                   <option key={board.id} value={board.id}>
                     {board.type === 'PROJECT' ? '📋' : '📝'} {board.name}
@@ -284,18 +183,11 @@ export default function DashboardPage() {
               📥 Staging
             </button>
             <button 
-              onClick={() => setShowEnergyDashboard(!showEnergyDashboard)}
-              className={`btn-ghost ${showEnergyDashboard ? 'bg-primary-100 dark:bg-primary-900' : ''}`}
-              title="Toggle energy management dashboard"
-            >
-              ⚡ Energy
-            </button>
-            <button 
               onClick={() => setShowEnergyFilter(true)}
               className="btn-ghost"
-              title="Filter tasks by energy level and mood"
+              title="Filter tasks by energy level"
             >
-              🔍 Filter
+              ⚡ Energy
             </button>
             <button 
               onClick={() => setShowChat(true)}
@@ -305,29 +197,12 @@ export default function DashboardPage() {
               🤖 AI Chat
             </button>
             <button 
-              onClick={() => {
-                if (debugMode) console.log('🔧 [DASHBOARD] New Task button clicked')
-                setShowTaskForm(true)
-              }}
+              onClick={() => setShowTaskForm(true)}
               className="btn-primary"
               title="Add new task"
             >
               ➕ New Task
             </button>
-            <button 
-              onClick={async () => {
-                if (currentBoard) {
-                  console.log('🔄 Manual board refresh triggered')
-                  await fetchBoard(currentBoard.id)
-                  toast.success('Board refreshed!')
-                }
-              }}
-              className="btn-ghost"
-              title="Refresh board data"
-            >
-              🔄 Refresh
-            </button>
-            <DebugToggle />
           </div>
         </div>
 
@@ -357,13 +232,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-
-        {/* Energy Dashboard */}
-        {showEnergyDashboard && (
-          <div className="mb-8">
-            <EnergyDashboard showFullStats={true} />
-          </div>
-        )}
 
         {/* Today's Tasks & Quick Wins */}
         <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -522,28 +390,28 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Smart Staging Area Modal */}
         {showStaging && (
-          <SmartStagingArea
+          <StagingArea
             isOpen={showStaging}
             onClose={() => setShowStaging(false)}
           />
         )}
 
-        {/* Energy Filter Modal */}
         {showEnergyFilter && (
           <EnergyFilter
             isOpen={showEnergyFilter}
             onClose={() => setShowEnergyFilter(false)}
-            onTasksFiltered={(tasks) => {
+            onFilter={(tasks) => {
               setFilteredTasks(tasks)
               setIsFiltered(true)
-              setShowEnergyFilter(false)
-              toast.success(`🔍 Filtered to ${tasks.length} tasks matching your energy level`)
+            }}
+            onClearFilter={() => {
+              setFilteredTasks([])
+              setIsFiltered(false)
             }}
           />
         )}
-        </div>
+      </div>
     </AppLayout>
   )
 }

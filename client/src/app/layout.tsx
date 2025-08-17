@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
+import { useEffect } from 'react'
+import { wrapFetchWithDebug } from '@/lib/fetch-debug'
 import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ 
@@ -60,6 +62,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Dev-only: wrap fetch to log API calls
+  if (typeof window !== 'undefined') {
+    wrapFetchWithDebug()
+  }
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>

@@ -9,7 +9,10 @@ const TaskProposalSchema = z.object({
   dueAt: z.string().datetime().optional(),
   estimateMin: z.number().int().min(1).max(1440).optional(),
   labels: z.array(z.string()).optional(),
-  subtasks: z.array(z.string()).optional()
+  subtasks: z.array(z.string()).optional(),
+  columnName: z.string().optional(), // AI-suggested column assignment
+  scheduledFor: z.string().datetime().optional(), // Calendar integration
+  recurrence: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']).optional() // Recurring tasks
 });
 
 const LLMResponseSchema = z.object({
@@ -38,7 +41,10 @@ export interface ShapingContext {
 // Mock LLM Provider for development
 class MockLLMProvider {
   async shapeTranscript(context: ShapingContext): Promise<LLMResponse> {
-    const { transcriptText } = context;
+    const { transcriptText, boardContext } = context;
+    
+    console.log('🤖 MockLLM: Processing transcript:', transcriptText.substring(0, 100) + '...');
+    console.log('🤖 MockLLM: Available columns:', boardContext.columns.map(c => c.name).join(', '));
     
     // Simple parsing for demo
     const tasks: TaskProposal[] = [];
@@ -62,6 +68,9 @@ class MockLLMProvider {
       let priority: TaskProposal['priority'] = 'MEDIUM';
       let energy: TaskProposal['energy'] = 'MEDIUM';
       let labels: string[] = [];
+      let columnName = 'Inbox'; // Default column
+      let dueAt: string | undefined;
+      let scheduledFor: string | undefined;
       
       // Extract action and determine priority/energy
       for (const pattern of taskPatterns) {
@@ -72,16 +81,61 @@ class MockLLMProvider {
         }
       }
       
-      // Determine priority based on keywords
+      // Determine priority and column based on keywords
       if (/urgent|asap|immediately|critical/i.test(text)) {
         priority = 'URGENT';
         energy = 'HIGH';
+        columnName = this.findBestColumn(boardContext.columns, ['To Do', 'Doing', 'In Progress']);
       } else if (/important|priority|soon/i.test(text)) {
         priority = 'HIGH';
         energy = 'MEDIUM';
+        columnName = this.findBestColumn(boardContext.columns, ['To Do']);
       } else if (/quick|simple|easy/i.test(text)) {
         priority = 'LOW';
         energy = 'LOW';
+        columnName = this.findBestColumn(boardContext.columns, ['Inbox', 'To Do']);
+      } else if (/started|begin|working on/i.test(text)) {
+        columnName = this.findBestColumn(boardContext.columns, ['Doing', 'In Progress']);
+      } else if (/plan|think about|research/i.test(text)) {
+        columnName = this.findBestColumn(boardContext.columns, ['Backlog', 'Planning', 'Inbox']);
+      }
+      
+      // Extract time-based information for scheduling
+      const timePatterns = [
+        { pattern: /tomorrow/i, days: 1 },
+        { pattern: /next week/i, days: 7 },
+        { pattern: /monday/i, days: this.getDaysUntilWeekday(1) },
+        { pattern: /tuesday/i, days: this.getDaysUntilWeekday(2) },
+        { pattern: /wednesday/i, days: this.getDaysUntilWeekday(3) },
+        { pattern: /thursday/i, days: this.getDaysUntilWeekday(4) },
+        { pattern: /friday/i, days: this.getDaysUntilWeekday(5) },
+        { pattern: /(\d+)\s*(?:am|pm)/i, hours: true },
+      ];
+      
+      for (const timePattern of timePatterns) {
+        if (timePattern.pattern.test(text)) {
+          const now = new Date();
+          if (timePattern.days) {
+            const targetDate = new Date(now.getTime() + timePattern.days * 24 * 60 * 60 * 1000);
+            dueAt = targetDate.toISOString();
+            if (timePattern.days <= 2) {
+              scheduledFor = targetDate.toISOString();
+            }
+          } else if (timePattern.hours) {
+            const hourMatch = text.match(/(\d+)\s*(am|pm)/i);
+            if (hourMatch) {
+              const hour = parseInt(hourMatch[1]);
+              const isPM = hourMatch[2].toLowerCase() === 'pm';
+              const targetDate = new Date(now);
+              targetDate.setHours(isPM && hour !== 12 ? hour + 12 : (hour === 12 && !isPM ? 0 : hour), 0, 0, 0);
+              if (targetDate <= now) {
+                targetDate.setDate(targetDate.getDate() + 1);
+              }
+              scheduledFor = targetDate.toISOString();
+            }
+          }
+          break;
+        }
       }
       
       // Extract labels based on content
@@ -138,23 +192,46 @@ class MockLLMProvider {
         }
       }
       
-      tasks.push({
+      const task: TaskProposal = {
         title: taskTitle,
         priority,
         energy,
         estimateMin,
         labels: labels.length > 0 ? labels : undefined,
-        subtasks: subtasks.length > 0 ? subtasks : undefined
-      });
+        subtasks: subtasks.length > 0 ? subtasks : undefined,
+        columnName,
+        dueAt,
+        scheduledFor
+      };
+      
+      console.log('🤖 MockLLM: Generated task:', { title: task.title, columnName: task.columnName, priority: task.priority });
+      tasks.push(task);
     }
     
     // Limit to max 7 tasks as per ADHD-friendly design
     const finalTasks = tasks.slice(0, 7);
     
+    console.log(`🤖 MockLLM: Generated ${finalTasks.length} tasks total`);
+    
     return {
       tasks: finalTasks,
       dedupeCandidates: [] // TODO: Implement deduplication logic
     };
+  }
+
+  private findBestColumn(availableColumns: Array<{ id: string; name: string }>, preferredColumns: string[]): string {
+    for (const preferred of preferredColumns) {
+      const found = availableColumns.find(col => col.name === preferred);
+      if (found) return found.name;
+    }
+    // Fallback to first available column
+    return availableColumns[0]?.name || 'Inbox';
+  }
+
+  private getDaysUntilWeekday(targetDay: number): number {
+    const today = new Date().getDay();
+    const diff = targetDay - today;
+    return diff <= 0 ? diff + 7 : diff;
   }
 }
 
@@ -171,21 +248,35 @@ class OpenAILLMProvider {
   async shapeTranscript(context: ShapingContext): Promise<LLMResponse> {
     const { transcriptText, boardContext, userTimezone = 'UTC' } = context;
     
-    const systemPrompt = `You are a task-shaping assistant for an ADHD-friendly task management system. Convert the user's transcript into atomic, actionable tasks.
+    const systemPrompt = `You are a task-shaping assistant for an ADHD-friendly task management system. Convert the user's transcript into atomic, actionable tasks with intelligent column placement and calendar integration.
 
 IMPORTANT GUIDELINES:
 - Prefer concrete action verbs (call, email, buy, schedule, write, etc.)
 - Split compound items into separate tasks
-- Infer reasonable due dates ONLY when the transcript contains clear time cues; otherwise omit
+- Assign tasks to appropriate columns based on their status and urgency
+- Infer reasonable due dates and scheduled times when the transcript contains time cues
 - Label tasks with energy level (LOW/MEDIUM/HIGH) based on complexity and cognitive load
 - Never hallucinate facts or add information not present in the transcript
 - Cap output to maximum 7 tasks to avoid overwhelming ADHD users
 - Mark uncertain items with summary notes like "(uncertain: person name?)"
 
+COLUMN ASSIGNMENT LOGIC:
+- "Inbox": New ideas, unclear tasks, things to review later
+- "To Do": Ready-to-start tasks, clearly defined actions
+- "Doing"/"In Progress": Currently working on, started tasks
+- "Done": Completed tasks (don't assign here)
+- "Backlog"/"Planning": Future ideas, not yet ready to start
+- "Review": Tasks waiting for approval or feedback
+
 ENERGY LEVELS:
 - LOW: Quick, routine tasks (5-15 min, low cognitive load)
 - MEDIUM: Standard tasks requiring focus (15-45 min, moderate complexity)  
 - HIGH: Complex tasks requiring deep work (45+ min, high cognitive load)
+
+CALENDAR INTEGRATION:
+- Set "dueAt" for tasks with clear deadlines
+- Set "scheduledFor" for tasks with specific times (meetings, appointments)
+- Use "recurrence" for recurring tasks (daily, weekly, monthly)
 
 Return strictly valid JSON matching the TypeScript schema provided.`;
 
@@ -209,6 +300,9 @@ type Output = {
     labels?: string[];
     estimateMin?: number;
     subtasks?: string[];
+    columnName?: string; // Must match one of the available column names
+    scheduledFor?: string; // ISO 8601 for calendar scheduling
+    recurrence?: "DAILY"|"WEEKLY"|"MONTHLY"; // For recurring tasks
   }[];
   dedupeCandidates?: { taskTitle: string; similarity: number }[];
 }`;

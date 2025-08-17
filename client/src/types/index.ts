@@ -90,6 +90,16 @@ export interface Task {
   updatedAt: string
   transcriptId?: string
   column?: Pick<Column, 'id' | 'name'>
+  
+  // Repeatable task fields
+  isRepeatable?: boolean
+  repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+  repeatInterval?: number // e.g., every 2 days, every 3 weeks
+  repeatDays?: number[] // for weekly: [1,3,5] = Mon,Wed,Fri (0=Sunday)
+  repeatEndDate?: string
+  repeatCount?: number // number of repetitions
+  parentTaskId?: string // if this is a repeated instance
+  nextDueDate?: string // when the next instance should be created
 }
 
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'

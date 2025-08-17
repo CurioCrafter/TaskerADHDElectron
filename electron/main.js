@@ -819,7 +819,7 @@ async function gracefulShutdown() {
   debugLog('🛑 Starting graceful shutdown...')
   
   try {
-    // Give servers time to clean up their connections
+    // First, cleanly shutdown our tracked processes
     if (serverProcess) {
       debugLog('📤 Sending SIGTERM to server process...')
       try {
@@ -865,6 +865,79 @@ async function gracefulShutdown() {
         debugLog('Error during client shutdown:', e.message)
       }
     }
+    
+    // Clean up any stray Node.js processes on our ports
+    debugLog('🧹 Cleaning up stray processes on known ports...')
+    if (process.platform === 'win32') {
+      const portsToClean = [3000, 3001, 3002, 3003, 3004, 3005]
+      
+      // First, try to kill processes on specific ports
+      for (const port of portsToClean) {
+        try {
+          const { spawn: spawnSync } = require('child_process')
+          // Find processes using the port
+          const netstat = spawnSync('powershell', ['-Command', 
+            `Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object OwningProcess`
+          ], { stdio: ['ignore', 'pipe', 'ignore'] })
+          
+          if (netstat.stdout) {
+            const output = netstat.stdout.toString()
+            const pidMatches = output.match(/\d+/g)
+            if (pidMatches) {
+              for (const pid of pidMatches) {
+                if (pid && parseInt(pid) > 0) {
+                  debugLog(`🔪 Killing process ${pid} on port ${port}`)
+                  // Kill with force and terminate child processes
+                  spawn('taskkill', ['/pid', pid, '/f', '/t'], { stdio: 'ignore' })
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Try alternative method with netstat
+          try {
+            const netstatAlt = spawnSync('netstat', ['-ano'], { stdio: ['ignore', 'pipe', 'ignore'] })
+            if (netstatAlt.stdout) {
+              const lines = netstatAlt.stdout.toString().split('\n')
+              for (const line of lines) {
+                if (line.includes(`:${port} `) && (line.includes('LISTENING') || line.includes('ESTABLISHED'))) {
+                  const parts = line.trim().split(/\s+/)
+                  const pid = parts[parts.length - 1]
+                  if (pid && parseInt(pid) > 0) {
+                    debugLog(`🔪 Force killing process ${pid} on port ${port}`)
+                    spawn('taskkill', ['/pid', pid, '/f', '/t'], { stdio: 'ignore' })
+                  }
+                }
+              }
+            }
+          } catch (e2) {
+            debugLog(`Could not clean port ${port}:`, e2.message)
+          }
+        }
+      }
+      
+      // Additional aggressive cleanup for Node.js processes
+      try {
+        debugLog('🔪 Final cleanup: killing any remaining Node.js processes')
+        
+        // Kill any node.exe processes that might be from our app
+        spawn('powershell', ['-Command', 
+          `Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq "node" } | Stop-Process -Force`
+        ], { stdio: 'ignore' })
+        
+        // Also try direct taskkill as backup
+        spawn('taskkill', ['/im', 'node.exe', '/f', '/t'], { stdio: 'ignore' })
+        
+        // Wait for processes to die
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+      } catch (e) {
+        debugLog('Could not perform final Node.js cleanup:', e.message)
+      }
+    }
+    
+    // Final wait to ensure all processes have time to die
+    await new Promise(resolve => setTimeout(resolve, 1000))
     
     debugLog('✅ Graceful shutdown completed')
   } catch (error) {

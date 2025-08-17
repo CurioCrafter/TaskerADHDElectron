@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import { useBoardStore } from '@/stores/board'
+import { useStagingStore } from '@/stores/staging'
 import type { TaskPriority, EnergyLevel } from '@/types'
 
 interface Message {
@@ -23,7 +24,8 @@ interface OpenAIChatProps {
 }
 
 export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
-  const { createTask, currentBoard } = useBoardStore()
+  const { currentBoard } = useBoardStore()
+  const { addToStaging } = useStagingStore()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -76,16 +78,37 @@ export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
       labels?: string[]
     }) => {
       try {
-        const task = await createTask(args)
-        if (task) {
-          toast.success(`✅ Created task: "${args.title}"`)
-          return { success: true, task: task, message: `Successfully created task "${args.title}"` }
-        } else {
-          return { success: false, message: 'Failed to create task' }
+        if (!currentBoard) {
+          return { success: false, message: 'No board selected' }
         }
+
+        // Send task to staging for intelligent processing
+        addToStaging({
+          title: args.title,
+          summary: args.summary || '',
+          priority: args.priority,
+          energy: args.energy,
+          estimateMin: args.estimateMin,
+          dueAt: args.dueAt,
+          labels: args.labels || [],
+          subtasks: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          position: 0,
+          
+          // Staging-specific metadata
+          source: 'ai_chat',
+          confidence: 0.85, // AI-generated tasks have high confidence
+          suggestedImprovements: [],
+          relatedTasks: [],
+          suggestedLabels: args.labels || []
+        })
+
+        toast.success(`📥 Task "${args.title}" sent to staging for review!`)
+        return { success: true, message: `Successfully staged task "${args.title}" - check Staging area to approve` }
       } catch (error) {
-        console.error('Task creation error:', error)
-        return { success: false, message: `Error creating task: ${error}` }
+        console.error('Task staging error:', error)
+        return { success: false, message: `Error staging task: ${error}` }
       }
     },
 
@@ -99,27 +122,68 @@ export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
       labels?: string[]
     }> }) => {
       try {
+        console.log(`🔧 Staging ${args.tasks.length} tasks via AI...`)
+        
+        if (!currentBoard) {
+          console.error('🚨 No current board for multiple task creation')
+          return { success: false, message: 'No board selected' }
+        }
+
         const results = []
-        for (const taskData of args.tasks) {
-          const task = await createTask(taskData)
-          if (task) {
+        
+        // Send all tasks to staging for intelligent processing
+        for (const [index, taskData] of args.tasks.entries()) {
+          console.log(`🔧 Staging task ${index + 1}/${args.tasks.length}: ${taskData.title}`)
+          
+          try {
+            addToStaging({
+              title: taskData.title,
+              summary: taskData.summary || '',
+              priority: taskData.priority,
+              energy: taskData.energy,
+              estimateMin: taskData.estimateMin,
+              dueAt: taskData.dueAt,
+              labels: taskData.labels || [],
+              subtasks: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              position: 0,
+              
+              // Staging-specific metadata
+              source: 'ai_chat',
+              confidence: 0.85, // AI-generated tasks have high confidence
+              suggestedImprovements: [],
+              relatedTasks: [],
+              suggestedLabels: taskData.labels || []
+            })
+            
+            console.log(`✅ Task staged: ${taskData.title}`)
             results.push({ success: true, title: taskData.title })
-          } else {
-            results.push({ success: false, title: taskData.title })
+          } catch (error) {
+            console.error(`🚨 Failed to stage task: ${taskData.title}`, error)
+            results.push({ success: false, title: taskData.title, error: 'Staging failed' })
           }
         }
         
         const successCount = results.filter(r => r.success).length
-        toast.success(`✅ Created ${successCount} of ${args.tasks.length} tasks`)
+        console.log(`🔧 Staged ${successCount}/${args.tasks.length} tasks successfully`)
+        
+        if (successCount > 0) {
+          toast.success(`📥 Sent ${successCount} of ${args.tasks.length} tasks to staging!`)
+          toast('💡 Check the Staging area to review and approve your tasks', { duration: 4000 })
+        } else {
+          toast.error('❌ Failed to stage any tasks')
+        }
         
         return { 
-          success: true, 
+          success: successCount > 0, 
           results,
-          message: `Successfully created ${successCount} of ${args.tasks.length} tasks`
+          message: `Successfully staged ${successCount} of ${args.tasks.length} tasks - check Staging area to approve`
         }
       } catch (error) {
-        console.error('Multiple task creation error:', error)
-        return { success: false, message: `Error creating tasks: ${error}` }
+        console.error('🚨 Multiple task staging error:', error)
+        toast.error('❌ Error staging multiple tasks')
+        return { success: false, message: `Error staging tasks: ${error}` }
       }
     }
   }

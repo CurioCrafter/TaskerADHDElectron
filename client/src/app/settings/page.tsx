@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
+import { toast } from 'react-hot-toast'
 import { useTheme } from '@/components/providers'
 import { useSettingsStore } from '@/stores/settings'
+import { AppLayout } from '@/components/layout/app-layout'
 
 // Force dynamic rendering to avoid localStorage issues during prerendering
 export const dynamic = 'force-dynamic'
@@ -10,32 +13,31 @@ export const dynamic = 'force-dynamic'
 export default function SettingsPage() {
   const { theme, setTheme, reducedMotion, setReducedMotion, highContrast, setHighContrast, focusMode, setFocusMode } = useTheme()
   const settings = useSettingsStore()
+  
+  // Only log in debug mode (client-side only)
+  useEffect(() => {
+    if (settings.debugMode) {
+      console.log('🔧 [SETTINGS] Settings page component loading...')
+    }
+  }, [settings.debugMode])
+  
+  // Simple page load tracking
+  useEffect(() => {
+    // Use global debug state
+    if (settings.debugMode) {
+      console.log('🔧 [SETTINGS] Settings page loaded')
+      toast(`⚙️ Settings loaded`, { 
+        duration: 2000, 
+        icon: '✅'
+      })
+    }
+  }, [settings.debugMode])
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/dashboard" className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                🎯 TaskerADHD
-              </Link>
-              <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">Settings</span>
-            </div>
-            <Link href="/dashboard" className="btn-secondary">
-              ← Back to Dashboard
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-            ⚙️ Settings
-          </h1>
+    <AppLayout title="Settings">
+      <div className="p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8">
 
           {/* Theme Settings */}
           <section className="mb-8">
@@ -348,8 +350,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </section>
+          </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

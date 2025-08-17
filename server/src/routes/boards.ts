@@ -36,6 +36,9 @@ const CreateColumnSchema = z.object({
 // GET /api/boards - Get user's boards
 router.get('/', async (req, res) => {
   try {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[API DEBUG] GET /api/boards user', { userId: req.user?.id })
+    }
     const userId = req.user!.id;
 
     const boards = await prisma.board.findMany({
@@ -100,6 +103,9 @@ router.get('/', async (req, res) => {
       }
     });
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[API DEBUG] GET /api/boards count', boards.length)
+    }
     res.json({ boards });
   } catch (error) {
     console.error('Get boards error:', error);
@@ -112,6 +118,9 @@ router.get('/:boardId', async (req, res) => {
   try {
     const { boardId } = req.params;
     const userId = req.user!.id;
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[API DEBUG] GET /api/boards/:boardId', { boardId, userId })
+    }
 
     const board = await prisma.board.findFirst({
       where: {
