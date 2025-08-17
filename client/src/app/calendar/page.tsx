@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast'
 import { useBoardStore } from '@/stores/board'
 import { useSettingsStore } from '@/stores/settings'
 import { AppLayout } from '@/components/layout/app-layout'
+import { TaskEditModal } from '@/components/ui/task-edit-modal'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays, isToday, parseISO } from 'date-fns'
 import type { Task } from '@/types'
 
@@ -52,6 +53,8 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'agenda'>('month')
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedBoard, setSelectedBoard] = useState<string>('all')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   // Load boards on mount with proper loading state
   useEffect(() => {
@@ -272,10 +275,18 @@ export default function CalendarPage() {
                   {tasksForDay.slice(0, 3).map((task, idx) => (
                     <div
                       key={idx}
-                      className={`text-xs p-1 rounded truncate ${getPriorityColor(task.priority)} text-white`}
-                      title={`${task.title} - ${task.boardName}`}
+                      className={`text-xs p-1 rounded truncate ${getPriorityColor(task.priority)} text-white flex items-center justify-between cursor-pointer hover:opacity-80`}
+                      title={`${task.title} - ${task.boardName}${task.isRepeatable ? ' (Repeatable)' : ''} - Click to edit`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditingTask(task)
+                        setIsEditModalOpen(true)
+                      }}
                     >
-                      {task.title}
+                      <span className="truncate flex-1">{task.title}</span>
+                      {task.isRepeatable && (
+                        <span className="ml-1 text-xs" title="Repeatable task">🔄</span>
+                      )}
                     </div>
                   ))}
                   {/* Local calendar events saved by voice calendar integration */}
@@ -334,10 +345,19 @@ export default function CalendarPage() {
                   {tasksForDay.map((task, idx) => (
                     <div
                       key={idx}
-                      className={`p-2 rounded text-xs text-white ${getPriorityColor(task.priority)}`}
-                      title={`${task.title} - ${task.boardName}`}
+                      className={`p-2 rounded text-xs text-white ${getPriorityColor(task.priority)} cursor-pointer hover:opacity-80`}
+                      title={`${task.title} - ${task.boardName}${task.isRepeatable ? ' (Repeatable)' : ''} - Click to edit`}
+                      onClick={() => {
+                        setEditingTask(task)
+                        setIsEditModalOpen(true)
+                      }}
                     >
-                      <div className="font-medium truncate">{task.title}</div>
+                      <div className="font-medium truncate flex items-center justify-between">
+                        <span className="truncate flex-1">{task.title}</span>
+                        {task.isRepeatable && (
+                          <span className="ml-1 text-xs" title="Repeatable task">🔄</span>
+                        )}
+                      </div>
                       <div className="text-xs opacity-90">{task.boardName}</div>
                     </div>
                   ))}
@@ -591,6 +611,18 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+      
+      {/* Task Edit Modal */}
+      {editingTask && (
+        <TaskEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false)
+            setEditingTask(null)
+          }}
+          task={editingTask}
+        />
+      )}
     </AppLayout>
   )
 }

@@ -51,7 +51,7 @@ const CALENDAR_KEYWORDS = [
   'next month', 'recurring', 'repeat', 'regularly'
 ]
 
-const TIME_PATTERNS = {
+const TIME_PATTERNS: { [key: string]: { hour: number; minute: number } } = {
   'morning': { hour: 9, minute: 0 },
   'afternoon': { hour: 14, minute: 0 },
   'evening': { hour: 18, minute: 0 },
@@ -143,7 +143,7 @@ export class VoiceCalendarIntegration {
             priority: 'MEDIUM',
             energy: 'LOW',
             estimateMin: 5,
-            dueAt: null,
+            dueAt: undefined,
             isRepeatable: false
           }],
           calendarEvents: [],
@@ -179,7 +179,7 @@ export class VoiceCalendarIntegration {
             priority: 'MEDIUM',
             energy: 'LOW',
             estimateMin: 5,
-            dueAt: null,
+            dueAt: undefined,
             isRepeatable: false
           }],
           calendarEvents: [],
@@ -259,7 +259,12 @@ Response format:
       "energy": "LOW" | "MEDIUM" | "HIGH", 
       "estimateMin": number_or_null,
       "dueAt": "ISO_date_string_or_null",
-      "isRepeatable": boolean
+      "isRepeatable": boolean,
+      "repeatPattern": "daily" | "weekly" | "monthly" | null,
+      "repeatInterval": number_or_null,
+      "repeatDays": [0,1,2,3,4,5,6] | null,
+      "repeatCount": number_or_null,
+      "repeatEndDate": "ISO_date_string_or_null"
     }
   ],
   "calendarEvents": [
@@ -288,11 +293,14 @@ Response format:
 
 Examples:
 - "Set a recurring reminder for Chick-fil-A every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], repeatCount: 52
 - "I want to eat pizza every week" → needs_clarification, confidence 0.2, questions: ["What day of the week?", "What time?", "Which restaurant or location?"]
 - "I want to go eat pizza every weekend" → needs_clarification, confidence 0.2, questions: ["What time on the weekend?", "Saturday, Sunday, or both?", "Which restaurant?"]
 - "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
 - "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52
 - "Review project every Monday morning at 9am" → ONE repeatable task + weekly calendar (Mondays 9am), confidence 0.9
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], repeatCount: 52
 
 Current date/time context: ${new Date().toISOString()}
 User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
