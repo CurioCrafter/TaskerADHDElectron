@@ -6,6 +6,8 @@ import { useBoardStore } from '@/stores/board'
 import { useSettingsStore } from '@/stores/settings'
 import { useTimeTrackingStore } from '@/stores/timeTracking'
 import { AppLayout } from '@/components/layout/app-layout'
+import { CurrentTimeDisplay } from '@/components/time-tracking/current-time-display'
+import { TimeEntryEditor } from '@/components/time-tracking/time-entry-editor'
 import { format } from 'date-fns'
 import type { Task } from '@/types'
 
@@ -16,7 +18,7 @@ interface TimeEntry {
   boardName: string
   startTime: Date
   endTime?: Date
-  duration?: number // in minutes
+  duration?: number // in seconds
   description?: string
   energy?: 'LOW' | 'MEDIUM' | 'HIGH'
   category?: string
@@ -40,6 +42,7 @@ export default function TimeTrackPage() {
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [view, setView] = useState<'timer' | 'log' | 'analytics'>('timer')
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
 
   // Debug logging
   useEffect(() => {
@@ -100,20 +103,23 @@ export default function TimeTrackPage() {
   const handleStopTimer = () => {
     const completedEntry = stopTimer()
     if (completedEntry) {
-      toast.success(`Tracked ${completedEntry.duration} minutes on "${completedEntry.taskTitle}"`)
+      toast.success(`Tracked ${formatDuration(completedEntry.duration || 0)} on "${completedEntry.taskTitle}"`)
     }
   }
 
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    if (hours === 0) return `${mins}m`
-    return `${hours}h ${mins}m`
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) return `${hours}h ${mins}m ${secs}s`
+    if (mins > 0) return `${mins}m ${secs}s`
+    return `${secs}s`
   }
 
   const getCurrentSessionTime = () => {
     if (!activeTimer) return 0
-    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / (1000 * 60))
+    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
   }
 
   const todaysTotal = getDailyTotal()
@@ -246,7 +252,9 @@ export default function TimeTrackPage() {
             {timeEntries.slice(0, 20).map(entry => (
               <div
                 key={entry.id}
-                className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
+                className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                onClick={() => setEditingEntry(entry)}
+                title="Click to edit this time entry"
               >
                 <div className="flex-1">
                   <h4 className="font-medium text-gray-900 dark:text-gray-100">
@@ -256,6 +264,11 @@ export default function TimeTrackPage() {
                     {entry.boardName} • {format(entry.startTime, 'MMM d, HH:mm')}
                     {entry.endTime && ` - ${format(entry.endTime, 'HH:mm')}`}
                   </p>
+                  {entry.description && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">
+                      {entry.description}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -263,6 +276,9 @@ export default function TimeTrackPage() {
                   </div>
                   <div className={`text-sm ${getEnergyColor(entry.energy)}`}>
                     {entry.energy} Energy
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    ✏️ Click to edit
                   </div>
                 </div>
               </div>
@@ -290,6 +306,7 @@ export default function TimeTrackPage() {
 
   return (
     <AppLayout title="Time Tracking">
+      <CurrentTimeDisplay />
       <div className="p-6">
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -393,6 +410,14 @@ export default function TimeTrackPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Time Entry Editor Modal */}
+        {editingEntry && (
+          <TimeEntryEditor
+            entry={editingEntry}
+            onClose={() => setEditingEntry(null)}
+          />
         )}
       </div>
     </AppLayout>

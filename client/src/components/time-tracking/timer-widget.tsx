@@ -119,21 +119,24 @@ export function TimerWidget({ isVisible, onClose, position = { x: 20, y: 20 }, o
 
   const getCurrentSessionTime = () => {
     if (!activeTimer) return 0
-    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / (1000 * 60))
+    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
   }
 
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    if (hours === 0) return `${mins}m`
-    return `${hours}h ${mins}m`
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) return `${hours}h ${mins}m ${secs}s`
+    if (mins > 0) return `${mins}m ${secs}s`
+    return `${secs}s`
   }
 
   const stopTimer = () => {
     if (!activeTimer) return
 
     const endTime = new Date()
-    const duration = Math.round((endTime.getTime() - activeTimer.startTime.getTime()) / (1000 * 60))
+    const duration = Math.round((endTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
 
     // Add to time entries
     const timeEntries = JSON.parse(localStorage.getItem('timeEntries') || '[]')

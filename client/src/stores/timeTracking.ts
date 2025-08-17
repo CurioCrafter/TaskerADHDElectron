@@ -9,7 +9,7 @@ export interface TimeEntry {
   boardName: string
   startTime: Date
   endTime?: Date
-  duration?: number // in minutes
+  duration?: number // in seconds
   description?: string
   energy?: 'LOW' | 'MEDIUM' | 'HIGH'
   category?: string
@@ -19,10 +19,10 @@ export interface TimeEntry {
 
 export interface TimeLog {
   taskId: string
-  totalTime: number // in minutes
+  totalTime: number // in seconds
   sessions: TimeEntry[]
   averageSessionLength: number
-  estimatedTime?: number
+  estimatedTime?: number // in seconds
   estimateAccuracy?: number // percentage
   lastTracked?: Date
 }
@@ -38,8 +38,8 @@ interface TimeTrackingState {
   timeLogs: Record<string, TimeLog>
   
   // Analytics
-  dailyTotals: Record<string, number> // date -> minutes
-  weeklyTotals: Record<string, number> // week -> minutes
+  dailyTotals: Record<string, number> // date -> seconds
+  weeklyTotals: Record<string, number> // week -> seconds
   
   // Actions
   startTimer: (task: { id: string; title: string; boardId: string; boardName: string; energy?: string }) => void
@@ -109,7 +109,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>()(
         if (!state.activeTimer) return null
 
         const endTime = new Date()
-        const duration = Math.round((endTime.getTime() - state.activeTimer.startTime.getTime()) / (1000 * 60))
+        const duration = Math.round((endTime.getTime() - state.activeTimer.startTime.getTime()) / 1000) // seconds
 
         const completedEntry: TimeEntry = {
           ...state.activeTimer,

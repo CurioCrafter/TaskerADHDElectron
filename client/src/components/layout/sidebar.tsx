@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useBoardStore } from '@/stores/board'
 
 interface SidebarProps {
@@ -13,7 +13,13 @@ export function Sidebar({ className = '' }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const { boards, currentBoard } = useBoardStore()
+
+  // Ensure we're on client side to avoid hydration issues
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path)
 
@@ -135,17 +141,17 @@ export function Sidebar({ className = '' }: SidebarProps) {
               // Ensure navigation occurs in Electron even if Link is not handled
               e.preventDefault()
               const target = item.href
-              const before = typeof window !== 'undefined' ? window.location.pathname : ''
+              const before = isClient ? window.location.pathname : ''
               router.push(target)
               // If route didn't change within 300ms, hard navigate
-              setTimeout(() => {
-                if (typeof window !== 'undefined') {
+              if (isClient) {
+                setTimeout(() => {
                   const after = window.location.pathname
                   if (after === before && after !== target) {
                     window.location.href = target
                   }
-                }
-              }, 300)
+                }, 300)
+              }
             }}
           >
             <span className="text-lg">{item.icon}</span>
@@ -261,7 +267,7 @@ export function Sidebar({ className = '' }: SidebarProps) {
             <span>🐛</span>
             {!collapsed && <span>Report Bug</span>}
           </button>
-          {typeof window !== 'undefined' && window.electronAPI && (
+          {isClient && typeof window !== 'undefined' && window.electronAPI && (
             <button
               onClick={handleShutdown}
               className={`w-full flex items-center space-x-3 px-3 py-2 text-sm text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${collapsed ? 'justify-center' : ''}`}

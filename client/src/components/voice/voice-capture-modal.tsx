@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVoiceStore } from '@/stores/voice'
 import { TaskShaper } from '@/services/llm/task-shaper'
+import { VoiceCalendarIntegration, type VoiceCalendarResult } from '@/services/llm/voice-calendar-integration'
 import { TaskProposalModal } from './task-proposal-modal'
+import { VoiceCalendarModal } from './voice-calendar-modal'
 import { toast } from 'react-hot-toast'
 import type { TaskShapingResult } from '@/services/llm/task-shaper'
 

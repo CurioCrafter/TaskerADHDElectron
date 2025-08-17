@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic'
 export default function SettingsPage() {
   const { theme, setTheme, reducedMotion, setReducedMotion, highContrast, setHighContrast, focusMode, setFocusMode } = useTheme()
   const settings = useSettingsStore()
+  const [timezone, setTimezone] = useState('')
   
   // Only log in debug mode (client-side only)
   useEffect(() => {
@@ -20,6 +21,12 @@ export default function SettingsPage() {
       console.log('🔧 [SETTINGS] Settings page component loading...')
     }
   }, [settings.debugMode])
+
+  // Load current timezone
+  useEffect(() => {
+    const savedTimezone = localStorage.getItem('userTimezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
+    setTimezone(savedTimezone)
+  }, [])
   
   // Simple page load tracking
   useEffect(() => {
@@ -33,8 +40,34 @@ export default function SettingsPage() {
     }
   }, [settings.debugMode])
 
+  const handleTimezoneChange = (newTimezone: string) => {
+    setTimezone(newTimezone)
+    localStorage.setItem('userTimezone', newTimezone)
+    toast.success(`Timezone set to ${newTimezone}`)
+  }
+
+  const syncWithSystemTimezone = () => {
+    const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    handleTimezoneChange(systemTimezone)
+  }
+
+  const commonTimezones = [
+    'America/New_York',
+    'America/Chicago', 
+    'America/Denver',
+    'America/Los_Angeles',
+    'Europe/London',
+    'Europe/Paris',
+    'Europe/Berlin',
+    'Asia/Tokyo',
+    'Asia/Shanghai',
+    'Australia/Sydney',
+    'UTC'
+  ]
+
   return (
     <AppLayout title="Settings">
+      <CurrentTimeDisplay />
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8">
@@ -201,6 +234,67 @@ export default function SettingsPage() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Used for AI chat and voice transcription (Realtime API). Stored locally in your browser.
                 </p>
+              </div>
+
+              {/* Timezone Settings */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  🕐 Time & Timezone Settings
+                </h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Current Timezone
+                    </label>
+                    <div className="flex items-center space-x-3">
+                      <select
+                        value={timezone}
+                        onChange={(e) => handleTimezoneChange(e.target.value)}
+                        className="input flex-1"
+                      >
+                        <optgroup label="Common Timezones">
+                          {commonTimezones.map(tz => (
+                            <option key={tz} value={tz}>
+                              {tz.replace('_', ' ')} - {new Date().toLocaleTimeString('en-US', { 
+                                timeZone: tz, 
+                                hour: '2-digit', 
+                                minute: '2-digit',
+                                hour12: false 
+                              })}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Current Selection">
+                          {!commonTimezones.includes(timezone) && (
+                            <option value={timezone}>{timezone}</option>
+                          )}
+                        </optgroup>
+                      </select>
+                      <button
+                        onClick={syncWithSystemTimezone}
+                        className="btn-secondary whitespace-nowrap"
+                      >
+                        🔄 Sync with System
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      This affects time display throughout the app and time tracking precision.
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
+                    <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">
+                      ⏱️ Time Tracking Improvements
+                    </h4>
+                    <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1">
+                      <li>• Time now tracked in seconds for maximum precision</li>
+                      <li>• Click any time entry in Time Tracking to edit it</li>
+                      <li>• Current time always displayed at the top</li>
+                      <li>• Manual time entry with custom duration support</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
 
               {/* Deepgram API Key */}
