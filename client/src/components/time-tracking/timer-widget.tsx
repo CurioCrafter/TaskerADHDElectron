@@ -42,7 +42,8 @@ export function TimerWidget({ isVisible, onClose, position = { x: 20, y: 20 }, o
       const parsed = JSON.parse(savedActiveTimer)
       setActiveTimer({
         ...parsed,
-        startTime: new Date(parsed.startTime)
+        startTime: new Date(parsed.startTime),
+        endTime: parsed.endTime ? new Date(parsed.endTime) : undefined
       })
     }
   }, [])
@@ -55,7 +56,8 @@ export function TimerWidget({ isVisible, onClose, position = { x: 20, y: 20 }, o
         const parsed = JSON.parse(savedActiveTimer)
         setActiveTimer({
           ...parsed,
-          startTime: new Date(parsed.startTime)
+          startTime: new Date(parsed.startTime),
+          endTime: parsed.endTime ? new Date(parsed.endTime) : undefined
         })
       } else {
         setActiveTimer(null)
@@ -119,7 +121,9 @@ export function TimerWidget({ isVisible, onClose, position = { x: 20, y: 20 }, o
 
   const getCurrentSessionTime = () => {
     if (!activeTimer) return 0
-    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
+    // Ensure startTime is a Date object (handles string dates from localStorage)
+    const startTime = activeTimer.startTime instanceof Date ? activeTimer.startTime : new Date(activeTimer.startTime)
+    return Math.floor((currentTime.getTime() - startTime.getTime()) / 1000) // seconds
   }
 
   const formatDuration = (seconds: number) => {
@@ -136,7 +140,9 @@ export function TimerWidget({ isVisible, onClose, position = { x: 20, y: 20 }, o
     if (!activeTimer) return
 
     const endTime = new Date()
-    const duration = Math.round((endTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
+    // Ensure startTime is a Date object
+    const startTime = activeTimer.startTime instanceof Date ? activeTimer.startTime : new Date(activeTimer.startTime)
+    const duration = Math.round((endTime.getTime() - startTime.getTime()) / 1000) // seconds
 
     // Add to time entries
     const timeEntries = JSON.parse(localStorage.getItem('timeEntries') || '[]')

@@ -337,7 +337,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>()(
       ),
       version: 1,
       migrate: (persistedState: any, version: number) => {
-        // Handle migration between versions
+        // Handle migration between versions and fix date serialization
         if (version === 0) {
           return {
             activeTimer: null,
@@ -349,7 +349,36 @@ export const useTimeTrackingStore = create<TimeTrackingState>()(
           }
         }
         return persistedState
-      }
+      },
+      // Custom serialization to handle dates properly
+      partialize: (state) => ({
+        ...state,
+        activeTimer: state.activeTimer ? {
+          ...state.activeTimer,
+          startTime: state.activeTimer.startTime.toISOString(),
+          endTime: state.activeTimer.endTime?.toISOString()
+        } : null,
+        timeEntries: state.timeEntries.map(entry => ({
+          ...entry,
+          startTime: entry.startTime.toISOString(),
+          endTime: entry.endTime?.toISOString()
+        }))
+      }),
+      // Custom deserialization to convert strings back to dates
+      merge: (persistedState: any, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        activeTimer: persistedState.activeTimer ? {
+          ...persistedState.activeTimer,
+          startTime: new Date(persistedState.activeTimer.startTime),
+          endTime: persistedState.activeTimer.endTime ? new Date(persistedState.activeTimer.endTime) : undefined
+        } : null,
+        timeEntries: (persistedState.timeEntries || []).map((entry: any) => ({
+          ...entry,
+          startTime: new Date(entry.startTime),
+          endTime: entry.endTime ? new Date(entry.endTime) : undefined
+        }))
+      })
     }
   )
 )

@@ -119,7 +119,9 @@ export default function TimeTrackPage() {
 
   const getCurrentSessionTime = () => {
     if (!activeTimer) return 0
-    return Math.floor((currentTime.getTime() - activeTimer.startTime.getTime()) / 1000) // seconds
+    // Ensure startTime is a Date object (handles string dates from localStorage)
+    const startTime = activeTimer.startTime instanceof Date ? activeTimer.startTime : new Date(activeTimer.startTime)
+    return Math.floor((currentTime.getTime() - startTime.getTime()) / 1000) // seconds
   }
 
   const todaysTotal = getDailyTotal()
