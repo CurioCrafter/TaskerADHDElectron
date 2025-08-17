@@ -177,12 +177,8 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
       await stop()
       toast.success('Voice recording stopped')
       
-      // If we have a final transcript, offer to shape it into tasks
-      if (transcript && transcript.trim().length > 10) {
-        setTimeout(() => {
-          handleShapeIntoTasks()
-        }, 500) // Small delay to let the UI update
-      }
+      // Don't auto-process - let user decide when to shape into tasks
+      // The transcript will be displayed and user can click "Shape into Tasks" button
     } catch (error) {
       console.error('Failed to stop recording:', error)
       toast.error('Failed to stop recording')
@@ -190,132 +186,82 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
   }
 
   const handleShapeIntoTasks = async () => {
-    if (!transcript || transcript.trim().length < 10) {
-      toast.error('Need more transcript content to create tasks')
+    if (!transcript.trim()) {
+      toast.error('No transcript to process')
       return
     }
 
     const openaiKey = localStorage.getItem('openai_api_key')
     if (!openaiKey) {
-      toast.error('OpenAI API key required for task shaping. Please configure in Settings.')
-      return
-    }
-
-    // Test API key validity first
-    try {
-      console.log('VoiceCaptureModal: Testing OpenAI API key...')
-      const testResponse = await fetch('https://api.openai.com/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${openaiKey}`,
-        }
-      })
-      
-      if (!testResponse.ok) {
-        const errorText = await testResponse.text()
-        console.error('VoiceCaptureModal: API key test failed:', testResponse.status, errorText)
-        throw new Error(`API key validation failed: ${testResponse.status} ${testResponse.statusText}`)
-      }
-      
-      console.log('VoiceCaptureModal: API key validation successful')
-    } catch (error) {
-      console.error('VoiceCaptureModal: API key test error:', error)
-      if (error instanceof Error && error.message.includes('API key validation failed')) {
-        toast.error('OpenAI API key is invalid or expired. Please check your settings.')
-      } else {
-        toast.error('Failed to validate OpenAI API key. Please check your internet connection.')
-      }
+      toast.error('OpenAI API key required. Please configure in Settings.')
       return
     }
 
     setIsShaping(true)
-    
     try {
-      // First attempt calendar-aware parse
+      // First, test the API key
+      const testResponse = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${openaiKey}` }
+      })
+      
+      if (!testResponse.ok) {
+        throw new Error(`API key test failed: ${testResponse.status}`)
+      }
+
+      // Process with voice calendar integration first
       const cal = new VoiceCalendarIntegration(openaiKey)
       const clarifyThreshold = useSettingsStore.getState().voiceSettings?.aiClarifyThreshold ?? 0.4
-      console.log('VoiceCaptureModal: Processing with calendar integration, threshold:', clarifyThreshold)
       
-      const calendarResult = await cal.processVoiceInput(transcript, clarifyThreshold)
-
-      if (calendarResult.intent === 'needs_clarification') {
-        // Handle clarifying questions
-        const questionsText = calendarResult.clarifyingQuestions?.join(' • ') || 'Need more details'
-        const clarifyTask = {
-          id: `clarify_${Date.now()}`,
-          title: `❓ Clarification needed: ${questionsText}`,
-          summary: `Original request: "${transcript}"\n\nPlease provide more details about: ${questionsText}`,
-          priority: 'MEDIUM' as const,
-          energy: 'LOW' as const,
-          estimateMin: 5,
-          confidence: 0.3
-        }
-        
-        const clarifyResult = {
-          intent: 'task_only' as const,
-          tasks: [clarifyTask],
-          calendarEvents: [],
-          confidence: 0.3,
-          processingTime: Date.now() - Date.now() // 0ms since this is immediate
-        }
-        
-        setTaskProposals(clarifyResult)
-        setShowProposals(true)
-        toast(`🤔 Need more details: ${questionsText}`, { 
-          duration: 6000,
-          icon: '❓'
+      const result = await cal.processVoiceInput(transcript, clarifyThreshold)
+      
+      if (result.intent === 'needs_clarification') {
+        // Show clarification needed - don't auto-process
+        setTaskProposals({
+          tasks: result.tasks.map(task => ({
+            ...task,
+            confidence: result.confidence || 0.3
+          })),
+          processingTime: Date.now() - Date.now()
         })
-      } else if (calendarResult.intent === 'calendar_only' || (calendarResult.calendarEvents?.length || 0) > 0) {
-        setCalendarProposals(calendarResult)
-        setShowCalendarProposals(true)
-        const eventCount = calendarResult.calendarEvents?.length || 0
-        const taskCount = calendarResult.tasks?.length || 0
-        toast.success(`Generated ${taskCount} task(s) and ${eventCount} calendar event(s)`)
-      } else {
-        // Fallback to task shaping only
-        console.log('VoiceCaptureModal: Falling back to task shaping')
-        const shaper = new TaskShaper(openaiKey)
-        const result = await shaper.shapeTranscript(transcript, {
-          maxTasks: 7,
-          includeSubtasks: true,
-          includeSummary: true,
-          checkDuplicates: false,
-          userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          shaperPreset: 'tasks'
-        })
-
-        setTaskProposals(result)
         setShowProposals(true)
-        toast.success(`🤖 Generated ${result.tasks.length} task proposal${result.tasks.length !== 1 ? 's' : ''}!`)
+        toast.success('🤔 AI needs more details. Click "Ask for Details" to get specific questions.')
+        return
       }
-      
+
+      // If we have a clear result, show it
+      if (result.calendarEvents && result.calendarEvents.length > 0) {
+        setCalendarProposals(result)
+        setShowCalendarProposals(true)
+      } else if (result.tasks && result.tasks.length > 0) {
+        setTaskProposals({
+          tasks: result.tasks.map(task => ({
+            ...task,
+            confidence: result.confidence || 0.8
+          })),
+          processingTime: Date.now() - Date.now()
+        })
+        setShowProposals(true)
+        toast.success('✅ Tasks generated!')
+      }
     } catch (error) {
-      console.error('VoiceCaptureModal: Task shaping failed:', error)
-      
-      // Provide more specific error messages
-      let errorMessage = 'Failed to generate tasks.'
+      console.error('Task shaping failed:', error)
+      let errorMessage = 'Failed to generate tasks'
       
       if (error instanceof Error) {
         if (error.message.includes('API key')) {
-          errorMessage = 'Invalid or missing OpenAI API key. Please check your settings.'
+          errorMessage = 'Invalid or missing OpenAI API key'
         } else if (error.message.includes('rate limit')) {
-          errorMessage = 'OpenAI API rate limit exceeded. Please try again later.'
+          errorMessage = 'Rate limit exceeded. Please try again later.'
         } else if (error.message.includes('quota')) {
-          errorMessage = 'OpenAI API quota exceeded. Please check your account.'
+          errorMessage = 'API quota exceeded. Please check your OpenAI account.'
         } else if (error.message.includes('network')) {
-          errorMessage = 'Network error. Please check your internet connection.'
+          errorMessage = 'Network error. Please check your connection.'
         } else {
-          errorMessage = `Error: ${error.message}`
+          errorMessage = error.message
         }
       }
       
       toast.error(errorMessage)
-      
-      // Also show in console for debugging
-      console.error('VoiceCaptureModal: Detailed error:', {
-        error,
-        transcript,
-        openaiKey: openaiKey ? `${openaiKey.substring(0, 8)}...` : 'missing'
-      })
     } finally {
       setIsShaping(false)
     }

@@ -94,8 +94,7 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
       // Create selected tasks
       for (const task of proposals.tasks) {
         if (selectedTasks.has(task.id)) {
-          if (currentBoard && !useStaging) {
-            // Direct to board when staging is OFF
+          if (currentBoard) {
             await createTask({
               title: task.title,
               summary: task.summary,
@@ -103,14 +102,26 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
               energy: task.energy as any,
               estimateMin: task.estimateMin,
               dueAt: task.dueAt,
-              isRepeatable: task.isRepeatable || false
+              isRepeatable: task.isRepeatable || false,
+              repeatPattern: task.repeatPattern,
+              repeatInterval: task.repeatInterval,
+              repeatDays: task.repeatDays,
+              repeatCount: task.repeatCount,
+              repeatEndDate: task.repeatEndDate
             })
             tasksCreated++
           } else if (useStaging) {
             // Add to staging only when staging is ON
             addToStaging({
               type: 'task',
-              data: task,
+              data: {
+                ...task,
+                repeatPattern: task.repeatPattern,
+                repeatInterval: task.repeatInterval,
+                repeatDays: task.repeatDays,
+                repeatCount: task.repeatCount,
+                repeatEndDate: task.repeatEndDate
+              },
               source: 'voice-calendar',
               transcript
             })
@@ -125,7 +136,12 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
                 energy: task.energy as any,
                 estimateMin: task.estimateMin,
                 dueAt: task.dueAt,
-                isRepeatable: task.isRepeatable || false
+                isRepeatable: task.isRepeatable || false,
+                repeatPattern: task.repeatPattern,
+                repeatInterval: task.repeatInterval,
+                repeatDays: task.repeatDays,
+                repeatCount: task.repeatCount,
+                repeatEndDate: task.repeatEndDate
               })
               tasksCreated++
             }

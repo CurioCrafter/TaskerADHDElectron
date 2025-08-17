@@ -82,6 +82,14 @@ export default function CalendarPage() {
     }
   }, [])
 
+  // Listen for board updates to refresh calendar
+  useEffect(() => {
+    if (boards && boards.length > 0) {
+      // Force a refresh when boards change
+      setCurrentDate((d) => new Date(d.getTime()))
+    }
+  }, [boards])
+
   // Get all tasks with due dates from all boards
   const getAllTasksWithDates = () => {
     if (!boards) return []
@@ -104,12 +112,47 @@ export default function CalendarPage() {
       }
     })
     
+    // Debug: log all tasks found
+    if (debugMode) {
+      console.log('🔧 [CALENDAR] All tasks with dates:', allTasks.map(t => ({
+        title: t.title,
+        dueAt: t.dueAt,
+        isRepeatable: t.isRepeatable,
+        repeatPattern: t.repeatPattern,
+        repeatDays: t.repeatDays
+      })))
+    }
+    
     return allTasks.sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
   }
 
   // Generate recurring task instances for calendar display
   const generateRecurringInstances = (task: Task & { boardName: string; boardId: string }, startDate: Date, endDate: Date) => {
-    if (!task.isRepeatable || !task.dueAt) return [task]
+    if (!task.isRepeatable || !task.dueAt) {
+      // Debug: log why task isn't being processed as repeatable
+      if (debugMode) {
+        console.log('🔧 [CALENDAR] Task not repeatable:', {
+          title: task.title,
+          isRepeatable: task.isRepeatable,
+          dueAt: task.dueAt,
+          repeatPattern: task.repeatPattern,
+          repeatInterval: task.repeatInterval,
+          repeatDays: task.repeatDays
+        })
+      }
+      return [task]
+    }
+    
+    // Debug: log repeatable task details
+    if (debugMode) {
+      console.log('🔧 [CALENDAR] Processing repeatable task:', {
+        title: task.title,
+        repeatPattern: task.repeatPattern,
+        repeatInterval: task.repeatInterval,
+        repeatDays: task.repeatDays,
+        repeatCount: task.repeatCount
+      })
+    }
     
     const instances: (Task & { boardName: string; boardId: string })[] = []
     const baseDate = parseISO(task.dueAt)
@@ -130,7 +173,25 @@ export default function CalendarPage() {
       if (task.repeatPattern === 'daily') {
         currentDate = addDays(currentDate, task.repeatInterval || 1)
       } else if (task.repeatPattern === 'weekly') {
-        currentDate = addDays(currentDate, 7 * (task.repeatInterval || 1))
+        if (task.repeatDays && task.repeatDays.length > 0) {
+          // Handle specific days of the week (e.g., weekends = [0,6])
+          const currentDay = currentDate.getDay()
+          const currentIndex = task.repeatDays.indexOf(currentDay)
+          
+          if (currentIndex !== -1 && currentIndex < task.repeatDays.length - 1) {
+            // Move to next day in the same week
+            const nextDay = task.repeatDays[currentIndex + 1]
+            currentDate = addDays(currentDate, nextDay - currentDay)
+          } else {
+            // Move to first day of next week
+            const nextWeekFirstDay = task.repeatDays[0]
+            const daysUntilNextWeek = (7 - currentDay) + nextWeekFirstDay
+            currentDate = addDays(currentDate, daysUntilNextWeek)
+          }
+        } else {
+          // No specific days, just add weeks
+          currentDate = addDays(currentDate, 7 * (task.repeatInterval || 1))
+        }
       } else if (task.repeatPattern === 'monthly') {
         currentDate = addDays(currentDate, 30 * (task.repeatInterval || 1))
       } else {
@@ -143,6 +204,10 @@ export default function CalendarPage() {
       
       // Stop if we have a repeat end date
       if (task.repeatEndDate && currentDate > parseISO(task.repeatEndDate)) break
+    }
+    
+    if (debugMode) {
+      console.log('🔧 [CALENDAR] Generated instances:', instances.length, 'for task:', task.title)
     }
     
     return instances
