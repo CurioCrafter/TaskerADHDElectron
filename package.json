@@ -1,0 +1,106 @@
+{
+  "name": "taskeradhd",
+  "version": "1.0.0",
+  "description": "ADHD-friendly task management with voice capture and AI assistance",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev:electron": "NODE_ENV=development electron .",
+    "build": "npm run build:server && npm run build:electron",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build:electron": "electron-builder",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps && cd client && npm install && cd ../server && npm install"
+  },
+  "build": {
+    "appId": "com.taskeradhd.app",
+    "productName": "TaskerADHD",
+    "directories": {
+      "output": "dist-new"
+    },
+    "files": [
+      "electron/**/*",
+      "node_modules/**/*",
+      "!node_modules/*/{README.md,readme.md,README,readme}",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!node_modules/**/*.d.ts",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "server",
+        "to": "server",
+        "filter": ["**/*", "!node_modules"]
+      },
+      {
+        "from": "client", 
+        "to": "client",
+        "filter": ["**/*", "!node_modules", "!.next/cache"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TaskerADHD",
+      "uninstallDisplayName": "TaskerADHD - ADHD Task Manager",
+      "deleteAppDataOnUninstall": true,
+      "runAfterFinish": true,
+      "menuCategory": "Productivity",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "perMachine": false,
+      "include": "installer.nsh"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "assets/icon.png"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/TaskerADHD.git"
+  },
+  "keywords": [
+    "adhd",
+    "task-management",
+    "voice-capture",
+    "ai",
+    "productivity"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "electron-reload": "^2.0.0-alpha.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  }
+}

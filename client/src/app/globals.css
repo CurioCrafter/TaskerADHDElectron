@@ -1,0 +1,314 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ADHD-friendly global styles */
+@layer base {
+	/* High contrast mode support */
+	@media (prefers-contrast: high) {
+		:root {
+			--tw-prose-body: theme('colors.black');
+			--tw-prose-headings: theme('colors.black');
+		}
+	}
+
+	/* Reduced motion support */
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
+
+	/* Focus styles for accessibility */
+	*:focus {
+		outline: 2px solid theme('colors.primary.500');
+		outline-offset: 2px;
+	}
+
+	/* Custom focus styles for interactive elements */
+	button:focus,
+	input:focus,
+	textarea:focus,
+	select:focus {
+		outline: 2px solid theme('colors.primary.500');
+		outline-offset: 2px;
+		box-shadow: 0 0 0 3px theme('colors.primary.100');
+	}
+
+	/* Ensure proper line height for readability */
+	body {
+		line-height: 1.6;
+		font-feature-settings: 'liga' off; /* Disable ligatures for dyslexia */
+	}
+
+	/* Improve text rendering */
+	html {
+		text-rendering: optimizeSpeed;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	/* High contrast borders for low-stim mode */
+	.low-stim {
+		--tw-border-opacity: 1;
+		--tw-bg-opacity: 0.95;
+	}
+
+	/* Custom scrollbar for better UX */
+	::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+
+	::-webkit-scrollbar-track {
+		background: theme('colors.gray.100');
+		border-radius: 4px;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background: theme('colors.gray.300');
+		border-radius: 4px;
+	}
+
+	::-webkit-scrollbar-thumb:hover {
+		background: theme('colors.gray.400');
+	}
+
+	/* Dark mode scrollbar */
+	.dark ::-webkit-scrollbar-track {
+		background: theme('colors.gray.800');
+	}
+
+	.dark ::-webkit-scrollbar-thumb {
+		background: theme('colors.gray.600');
+	}
+
+	.dark ::-webkit-scrollbar-thumb:hover {
+		background: theme('colors.gray.500');
+	}
+}
+
+@layer components {
+	/* Card components */
+	.card {
+		@apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4;
+	}
+
+	.card-hover {
+		@apply transition-shadow hover:shadow-md;
+	}
+
+	/* Button variants */
+	.btn {
+		@apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+	}
+
+	.btn-primary {
+		@apply btn text-white bg-primary-600 hover:bg-primary-700 focus:ring-primary-500;
+	}
+
+	.btn-secondary {
+		@apply btn text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-primary-500;
+	}
+
+	.btn-danger {
+		@apply btn text-white bg-red-600 hover:bg-red-700 focus:ring-red-500;
+	}
+
+	.btn-ghost {
+		@apply btn text-gray-500 dark:text-gray-200 bg-transparent border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 focus:ring-primary-500;
+	}
+
+	.btn-sm {
+		@apply px-3 py-1.5 text-xs;
+	}
+
+	.btn-lg {
+		@apply px-6 py-3 text-base;
+	}
+
+	/* Task priority indicators */
+	.priority-low {
+		@apply border-l-4 border-priority-low;
+	}
+
+	.priority-medium {
+		@apply border-l-4 border-priority-medium;
+	}
+
+	.priority-high {
+		@apply border-l-4 border-priority-high;
+	}
+
+	.priority-urgent {
+		@apply border-l-4 border-priority-urgent animate-pulse-slow;
+	}
+
+	/* Energy level indicators */
+	.energy-low {
+		@apply bg-green-50 border-energy-low;
+	}
+
+	.energy-medium {
+		@apply bg-amber-50 border-energy-medium;
+	}
+
+	.energy-high {
+		@apply bg-red-50 border-energy-high;
+	}
+
+	/* Kanban column styles */
+	.kanban-column {
+		@apply bg-gray-50 dark:bg-gray-900 rounded-lg p-4 min-h-[500px] w-full; /* removed fixed width */
+	}
+
+	.kanban-column-header {
+		@apply flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700;
+	}
+
+	.kanban-task {
+		@apply bg-white dark:bg-gray-800 rounded-lg p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:shadow-md transition-shadow;
+	}
+
+	/* Voice recording states */
+	.voice-recording {
+		@apply bg-red-100 border-red-300 animate-pulse-slow;
+	}
+
+	.voice-processing {
+		@apply bg-blue-100 border-blue-300;
+	}
+
+	/* Input styles */
+	.input {
+		@apply block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+	}
+
+	.input-error {
+		@apply border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500;
+	}
+
+	/* Accessibility helpers */
+	.sr-only {
+		@apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+	}
+
+	/* Loading states */
+	.skeleton {
+		@apply animate-pulse bg-gray-200 dark:bg-gray-700 rounded;
+	}
+
+	.spinner {
+		@apply animate-spin rounded-full border-2 border-gray-300 dark:border-gray-600 border-t-primary-600;
+	}
+
+	/* Focus mode styles - Minimizes distractions and emphasizes current work */
+	.focus-mode {
+		/* Subtle background tint to indicate focus mode is active */
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.02), rgba(99, 102, 241, 0.02));
+	}
+
+	/* Hide secondary UI elements in focus mode */
+	.focus-mode .focus-hide {
+		@apply opacity-30 transition-opacity duration-300;
+	}
+
+	.focus-mode .focus-hide:hover {
+		@apply opacity-100;
+	}
+
+	/* Emphasize primary work area */
+	.focus-mode .focus-primary {
+		@apply ring-2 ring-primary-400 dark:ring-primary-500 rounded-lg;
+	}
+
+	/* Reduce visual noise from non-active columns */
+	.focus-mode .kanban-column:not(.focus-primary) {
+		@apply opacity-60 transition-opacity duration-300;
+	}
+
+	.focus-mode .kanban-column:not(.focus-primary):hover {
+		@apply opacity-80;
+	}
+
+	/* Simplify task cards in non-focus columns */
+	.focus-mode .kanban-task:not(.focused) {
+		@apply opacity-70 scale-95 transition-all duration-300;
+	}
+
+	.focus-mode .kanban-task.focused {
+		@apply opacity-100 ring-2 ring-blue-400 dark:ring-blue-500 scale-100 shadow-lg;
+	}
+
+	/* Hide secondary navigation elements */
+	.focus-mode .focus-secondary {
+		@apply hidden;
+	}
+
+	/* Simplify header appearance */
+	.focus-mode header {
+		@apply backdrop-blur-sm bg-white/80 dark:bg-gray-800/80;
+	}
+
+	/* Reduce motion and animations in focus mode for less distraction */
+	.focus-mode * {
+		animation-duration: 0.2s !important;
+		transition-duration: 0.2s !important;
+	}
+}
+
+@layer utilities {
+	/* Custom utilities for ADHD-friendly design */
+	.text-balance {
+		text-wrap: balance;
+	}
+
+	.no-ligatures {
+		font-feature-settings: 'liga' off;
+	}
+
+	.break-anywhere {
+		word-break: break-word;
+		overflow-wrap: anywhere;
+	}
+
+	/* Animation utilities */
+	.animate-in {
+		animation: fadeIn 0.2s ease-in-out;
+	}
+
+	.animate-out {
+		animation: fadeOut 0.2s ease-in-out;
+	}
+
+	/* Custom backgrounds */
+	.bg-gradient-calm {
+		background: linear-gradient(135deg, theme('colors.blue.50'), theme('colors.indigo.50'));
+	}
+
+	.bg-gradient-energy {
+		background: linear-gradient(135deg, theme('colors.green.50'), theme('colors.emerald.50'));
+	}
+
+	/* Grid fixes for Kanban */
+	.grid-kanban {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 1.5rem;
+	}
+
+	/* Print styles */
+	@media print {
+		.no-print {
+			display: none !important;
+		}
+		
+		.print-break {
+			page-break-before: always;
+		}
+	}
+}

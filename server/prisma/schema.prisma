@@ -1,0 +1,218 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  displayName  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  boards       Board[]
+  apiKeys      ApiKey[]
+  settings     Json?
+  transcripts  Transcript[]
+  boardMembers BoardMember[]
+
+  @@map("users")
+}
+
+model Board {
+  id          String        @id @default(cuid())
+  name        String
+  description String?       // Project description
+  type        BoardType     @default(PERSONAL) // Board type (personal/project)
+  priority    BoardPriority @default(MEDIUM)   // Project priority
+  status      BoardStatus   @default(ACTIVE)   // Project status
+  dueDate     DateTime?     // Project due date
+  tags        Json?         @default("[]")     // Project tags (JSON array)
+  metadata    Json?         // Additional project data (templates, etc)
+  ownerId     String
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  columns     Column[]
+  members     BoardMember[]
+  tasks       Task[]        // Direct relation to tasks
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("boards")
+}
+
+model BoardMember {
+  id      String    @id @default(cuid())
+  boardId String
+  userId  String
+  role    BoardRole @default(EDITOR)
+  board   Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+  @@map("board_members")
+}
+
+enum BoardRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum BoardType {
+  PERSONAL
+  PROJECT
+  TEAM
+  TEMPLATE
+}
+
+enum BoardPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum BoardStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+model Column {
+  id       String @id @default(cuid())
+  boardId  String
+  name     String // e.g., "Inbox", "To Do", "Doing", "Done"
+  position Int
+  board    Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+
+  @@unique([boardId, position])
+  @@map("columns")
+}
+
+model Task {
+  id           String        @id @default(cuid())
+  boardId      String
+  columnId     String
+  title        String
+  summary      String?
+  priority     TaskPriority?
+  energy       EnergyLevel?
+  dueAt        DateTime?
+  estimateMin  Int?
+  position     Int           @default(0)
+  labels       TaskLabel[]   @relation("TaskLabels")
+  subtasks     Subtask[]
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transcriptId String?
+
+  board  Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column Column @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum EnergyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Subtask {
+  id       String  @id @default(cuid())
+  taskId   String
+  title    String
+  done     Boolean @default(false)
+  position Int
+  task     Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("subtasks")
+}
+
+model Label {
+  id    String      @id @default(cuid())
+  name  String      @unique
+  color String? // hex
+  tasks TaskLabel[]
+
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade, name: "TaskLabels")
+  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+model Transcript {
+  id         String     @id @default(cuid())
+  userId     String
+  text       String
+  confidence Float?
+  audioUrl   String?
+  createdAt  DateTime   @default(now())
+  proposals  Proposal[]
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transcripts")
+}
+
+model Proposal {
+  id           String         @id @default(cuid())
+  transcriptId String
+  json         Json // proposed tasks
+  status       ProposalStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
+  transcript   Transcript     @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@map("proposals")
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String // "OPENAI", "DEEPGRAM", etc.
+  keyCipher String // encrypted
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model MagicLink {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("magic_links")
+}
