@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
-import { format, addMonths } from 'date-fns'
+import { format } from 'date-fns'
 import type { VoiceCalendarResult, CalendarEvent } from '@/services/llm/voice-calendar-integration'
 import { VoiceCalendarIntegration } from '@/services/llm/voice-calendar-integration'
 import { useBoardStore } from '@/stores/board'
@@ -13,9 +13,10 @@ interface VoiceCalendarModalProps {
   onClose: () => void
   proposals: VoiceCalendarResult | null
   transcript: string
+  useStaging?: boolean
 }
 
-export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: VoiceCalendarModalProps) {
+export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, useStaging: globalUseStaging = false }: VoiceCalendarModalProps) {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set())
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
@@ -23,6 +24,7 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
   
   const { currentBoard, createTask } = useBoardStore()
   const { addToStaging } = useStagingStore()
+  const [useStaging, setUseStaging] = useState(globalUseStaging)
 
   // Select all by default
   useEffect(() => {
@@ -33,6 +35,11 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
       setSelectedEvents(eventIds)
     }
   }, [proposals])
+
+  // Sync with global staging preference
+  useEffect(() => {
+    setUseStaging(globalUseStaging)
+  }, [globalUseStaging])
 
   if (!isOpen || !proposals) return null
 
@@ -87,7 +94,8 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
       // Create selected tasks
       for (const task of proposals.tasks) {
         if (selectedTasks.has(task.id)) {
-          if (currentBoard) {
+          if (currentBoard && !useStaging) {
+            // Direct to board when staging is OFF
             await createTask({
               title: task.title,
               summary: task.summary,
@@ -98,8 +106,8 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
               isRepeatable: task.isRepeatable || false
             })
             tasksCreated++
-          } else {
-            // Add to staging if no current board
+          } else if (useStaging) {
+            // Add to staging only when staging is ON
             addToStaging({
               type: 'task',
               data: task,
@@ -107,6 +115,20 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
               transcript
             })
             tasksCreated++
+          } else {
+            // Fallback: create directly on board if staging is OFF but no current board
+            if (currentBoard) {
+              await createTask({
+                title: task.title,
+                summary: task.summary,
+                priority: task.priority as any,
+                energy: task.energy as any,
+                estimateMin: task.estimateMin,
+                dueAt: task.dueAt,
+                isRepeatable: task.isRepeatable || false
+              })
+              tasksCreated++
+            }
           }
         }
       }
@@ -160,6 +182,8 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
     }
     
     localStorage.setItem('calendarEvents', JSON.stringify(existingEvents))
+    // Notify any open pages to refresh calendar view
+    try { window.dispatchEvent(new Event('calendarEventsUpdated')) } catch {}
   }
 
   const formatRecurrence = (event: CalendarEvent): string => {
@@ -352,7 +376,11 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript }: V
             <div className="text-sm text-gray-500 dark:text-gray-400">
               Selected: {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''}, {selectedEvents.size} event{selectedEvents.size !== 1 ? 's' : ''}
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                <input type="checkbox" className="mr-2" checked={useStaging} onChange={(e) => setUseStaging(e.target.checked)} />
+                Use Staging for tasks
+              </label>
               <button
                 onClick={onClose}
                 disabled={isCreating}

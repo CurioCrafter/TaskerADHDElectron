@@ -86,6 +86,44 @@ TaskerADHD is designed specifically for people with ADHD, incorporating research
 3. **Click Start** to begin timing
 4. **Use the Timer Widget** (click "⏱️ Timer" on dashboard) for always-visible tracking
 5. **Stop timer** when done - automatic logging with analytics
+6. **Export / Import**
+   - Export: Time Track → "⬇️ Export Time Data" (JSON)
+   - Import: Time Track → "⬆️ Import Time Data" (select a previously exported JSON)
+   - Data stays local; no server required
+
+### Voice + Calendar (Local-first)
+- Use the Voice Capture modal and say natural phrases like:
+  - "Plan weekly Chick-fil-A visits every Friday at 6pm for 10 weeks"
+  - "Grocery shopping every weekend at 10am"
+- The Voice Calendar modal proposes tasks and calendar events:
+  - Toggle "Use Staging for tasks" to route tasks via staging or directly into the board
+  - Accept to save events locally (appear as purple entries in Calendar)
+- If ambiguous (e.g., "every weekend" without time), AI returns clarifying questions. Answer and retry or manually edit.
+
+### Calendar
+- Displays both:
+  - Server-backed tasks with `dueAt`
+  - Local voice-created events (purple chips)
+- Updates instantly when events are accepted from the voice modal
+
+## 🗄️ Data Export / Import
+
+Where your data lives:
+- Tasks/Boards: server (SQLite/Prisma by default)
+- Time tracking: local (Zustand + localStorage)
+- Voice-created calendar events: localStorage
+
+Export (local data):
+- Settings → "⬇️ Export Local Data" to export settings, time tracking, and calendar events
+- Time Track → "⬇️ Export Time Data" to export only time entries/logs
+
+Import (local data):
+- Settings → "⬆️ Import Local Data" and choose a JSON previously exported
+- Time Track → "⬆️ Import Time Data" merges non-duplicate entries and rebuilds analytics
+
+Portability:
+- Exports are plain JSON; you can back them up/sync manually
+- No cloud service required
 
 ### Desktop Widget
 - **Toggle Widget**: Click "⏱️ Timer" button on dashboard

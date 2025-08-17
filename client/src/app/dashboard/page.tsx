@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [showVoiceCapture, setShowVoiceCapture] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [showStaging, setShowStaging] = useState(false)
+  const [useStaging, setUseStaging] = useState(false)
   const [showEnergyDashboard, setShowEnergyDashboard] = useState(true) // Always on by default
   const [showEnergyFilter, setShowEnergyFilter] = useState(false)
   const [filteredTasks, setFilteredTasks] = useState<any[]>([])
@@ -288,6 +289,13 @@ export default function DashboardPage() {
               📥 Staging
             </button>
             <button 
+              onClick={() => setUseStaging(!useStaging)}
+              className={`btn-ghost text-xs ${useStaging ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'text-gray-500'}`}
+              title={`Toggle staging mode: ${useStaging ? 'ON - new tasks go to staging' : 'OFF - tasks go directly to board'}`}
+            >
+              {useStaging ? '📋 Staging ON' : '📋 Staging OFF'}
+            </button>
+            <button 
               onClick={() => setShowEnergyDashboard(!showEnergyDashboard)}
               className={`btn-ghost ${showEnergyDashboard ? 'bg-primary-100 dark:bg-primary-900' : ''}`}
               title="Toggle energy management dashboard"
@@ -523,6 +531,7 @@ export default function DashboardPage() {
             isOpen={showVoiceCapture}
             onClose={() => setShowVoiceCapture(false)}
             boardId={currentBoard?.id || ''}
+            useStaging={useStaging}
           />
         )}
 

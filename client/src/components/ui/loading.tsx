@@ -114,14 +114,14 @@ export function LoadingPage({
   description 
 }: LoadingPageProps) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
       <div className="text-center">
         <LoadingSpinner size="lg" className="mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
           {title}
         </h2>
         {description && (
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-300">
             {description}
           </p>
         )}

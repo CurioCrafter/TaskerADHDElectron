@@ -14,7 +14,7 @@
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^10.16.16",
-    "next": "^14.0.4",
+    "next": "^14.2.5",
     "react": "^18.2.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",

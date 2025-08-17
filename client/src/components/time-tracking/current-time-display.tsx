@@ -9,15 +9,16 @@ export function CurrentTimeDisplay() {
   const [timezone, setTimezone] = useState<string>('')
   const { debugMode } = useSettingsStore()
 
+  // Avoid hydration mismatches by initializing on client only
   useEffect(() => {
     // Get system timezone
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
-    
+
     // Update time every second
     const interval = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
-    
+
     return () => clearInterval(interval)
   }, [])
 
@@ -60,6 +61,13 @@ export function CurrentTimeDisplay() {
 
   if (debugMode) {
     console.log('🔧 [TIME DISPLAY] Current timezone:', timezone)
+  }
+
+  // During SSR, timezone will be empty; render a minimal placeholder to avoid mismatch
+  if (!timezone) {
+    return (
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-2" />
+    )
   }
 
   return (

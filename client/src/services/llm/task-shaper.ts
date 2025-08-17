@@ -14,6 +14,7 @@ export interface TaskProposal {
   subtasks?: string[]
   confidence: number // 0-1 confidence in the proposal
   reasoning?: string // Why the LLM made these choices
+  isRepeatable?: boolean // Whether this is a recurring task
 }
 
 export interface TaskShapingResult {
@@ -122,6 +123,7 @@ CORE PRINCIPLES:
 - Flag uncertainties clearly
 - Prefer specific over vague language
 - Consider executive function challenges
+- Set isRepeatable=true for recurring tasks (daily, weekly, monthly, "every X")
 
 OUTPUT FORMAT:
 Return a JSON object with this exact structure:
@@ -137,7 +139,8 @@ Return a JSON object with this exact structure:
       "labels": ["category", "context"],
       "subtasks": ["atomic step 1", "atomic step 2"],
       "confidence": 0.95,
-      "reasoning": "Why these choices were made"
+      "reasoning": "Why these choices were made",
+      "isRepeatable": boolean // true if this is a recurring task (daily, weekly, etc.)
     }
   ],
   "summary": "Brief bullet-point summary of transcript",
@@ -278,7 +281,8 @@ JOURNAL PRESET:
         labels,
         subtasks,
         confidence,
-        reasoning: typeof task.reasoning === 'string' ? task.reasoning.trim() : undefined
+        reasoning: typeof task.reasoning === 'string' ? task.reasoning.trim() : undefined,
+        isRepeatable: typeof task.isRepeatable === 'boolean' ? task.isRepeatable : undefined
       }
     })
 

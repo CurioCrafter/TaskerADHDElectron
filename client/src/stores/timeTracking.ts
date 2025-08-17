@@ -61,6 +61,7 @@ interface TimeTrackingState {
   exportTimeEntries: (startDate?: Date, endDate?: Date) => TimeEntry[]
   importTimeEntries: (entries: TimeEntry[]) => void
   clearAllEntries: () => void
+  rebuildAggregates: () => void
 }
 
 const formatDate = (date: Date) => {
@@ -307,13 +308,17 @@ export const useTimeTrackingStore = create<TimeTrackingState>()(
       importTimeEntries: (entries) => {
         const state = get()
         const existingIds = new Set(state.timeEntries.map(e => e.id))
-        const newEntries = entries.filter(e => !existingIds.has(e.id))
-        
-        set({
-          timeEntries: [...newEntries, ...state.timeEntries].sort(
-            (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-          )
-        })
+        const merged = [...state.timeEntries]
+        for (const e of entries) {
+          if (!existingIds.has(e.id)) {
+            merged.push(e)
+          }
+        }
+        const sorted = merged.sort(
+          (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )
+        set({ timeEntries: sorted })
+        get().rebuildAggregates()
       },
 
       clearAllEntries: () => {
@@ -323,6 +328,43 @@ export const useTimeTrackingStore = create<TimeTrackingState>()(
           dailyTotals: {},
           weeklyTotals: {},
           activeTimer: null
+        })
+      },
+
+      rebuildAggregates: () => {
+        const state = get()
+        const newDailyTotals: Record<string, number> = {}
+        const newWeeklyTotals: Record<string, number> = {}
+        const newTimeLogs: Record<string, TimeLog> = {}
+
+        for (const entry of state.timeEntries) {
+          const hasEnd = !!entry.endTime
+          const duration = entry.duration ?? (hasEnd ? Math.max(0, Math.round(((entry.endTime as Date).getTime() - entry.startTime.getTime()) / 1000)) : 0)
+          if (!duration) continue
+
+          const dateKey = formatDate(entry.startTime)
+          const weekKey = getWeekKey(entry.startTime)
+          newDailyTotals[dateKey] = (newDailyTotals[dateKey] || 0) + duration
+          newWeeklyTotals[weekKey] = (newWeeklyTotals[weekKey] || 0) + duration
+
+          const existing = newTimeLogs[entry.taskId] || {
+            taskId: entry.taskId,
+            totalTime: 0,
+            sessions: [] as TimeEntry[],
+            averageSessionLength: 0,
+            lastTracked: entry.startTime
+          }
+          existing.sessions.push(entry)
+          existing.totalTime += duration
+          existing.averageSessionLength = Math.round(existing.totalTime / Math.max(1, existing.sessions.length))
+          existing.lastTracked = entry.startTime
+          newTimeLogs[entry.taskId] = existing
+        }
+
+        set({
+          dailyTotals: newDailyTotals,
+          weeklyTotals: newWeeklyTotals,
+          timeLogs: newTimeLogs
         })
       }
     }),

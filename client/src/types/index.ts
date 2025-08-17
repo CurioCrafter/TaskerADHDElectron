@@ -13,10 +13,12 @@ export interface UserSettings {
   reducedMotion?: boolean
   highContrast?: boolean
   focusMode?: boolean
+  timeFormat?: '12h' | '24h'
   voiceSettings?: {
     autoStart?: boolean
     wakeWord?: boolean
     language?: string
+    aiClarifyThreshold?: number // 0..1 – confidence at/below which to ask clarifying questions
   }
   taskPreferences?: {
     defaultEnergy?: EnergyLevel

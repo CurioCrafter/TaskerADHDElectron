@@ -138,19 +138,20 @@ export function Sidebar({ className = '' }: SidebarProps) {
             }`}
             title={collapsed ? `${item.name}: ${item.description}` : undefined}
             onClick={(e) => {
-              // Ensure navigation occurs in Electron even if Link is not handled
-              e.preventDefault()
-              const target = item.href
-              const before = isClient ? window.location.pathname : ''
-              router.push(target)
-              // If route didn't change within 300ms, hard navigate
-              if (isClient) {
-                setTimeout(() => {
-                  const after = window.location.pathname
-                  if (after === before && after !== target) {
-                    window.location.href = target
-                  }
-                }, 300)
+              // In Electron, Next Link might not handle navigation; handle manually.
+              if (typeof window !== 'undefined' && (window as any).electronAPI) {
+                e.preventDefault()
+                const target = item.href
+                const before = isClient ? window.location.pathname : ''
+                router.push(target)
+                if (isClient) {
+                  setTimeout(() => {
+                    const after = window.location.pathname
+                    if (after === before && after !== target) {
+                      window.location.href = target
+                    }
+                  }, 300)
+                }
               }
             }}
           >

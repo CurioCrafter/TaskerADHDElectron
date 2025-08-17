@@ -68,6 +68,17 @@ export default function CalendarPage() {
     loadData()
   }, [fetchBoards])
 
+  // Listen for local calendar event updates (from voice modal storing events)
+  useEffect(() => {
+    const handler = () => setCurrentDate((d) => new Date(d.getTime()))
+    if (typeof window !== 'undefined') {
+      window.addEventListener('calendarEventsUpdated', handler)
+    }
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('calendarEventsUpdated', handler)
+    }
+  }, [])
+
   // Get all tasks with due dates from all boards
   const getAllTasksWithDates = () => {
     if (!boards) return []
@@ -199,6 +210,24 @@ export default function CalendarPage() {
                       {task.title}
                     </div>
                   ))}
+                  {/* Local calendar events saved by voice calendar integration */}
+                  {(() => {
+                    try {
+                      const events = JSON.parse(localStorage.getItem('calendarEvents') || '[]')
+                      const todays = events.filter((e: any) => isSameDay(new Date(e.startDate), day))
+                      return todays.slice(0, 3).map((e: any, idx: number) => (
+                        <div
+                          key={`local-${idx}`}
+                          className="text-xs p-1 rounded truncate bg-purple-600 text-white"
+                          title={e.title}
+                        >
+                          {e.title}
+                        </div>
+                      ))
+                    } catch {
+                      return null
+                    }
+                  })()}
                   {tasksForDay.length > 3 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       +{tasksForDay.length - 3} more

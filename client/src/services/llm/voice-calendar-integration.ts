@@ -27,7 +27,7 @@ export interface RecurrencePattern {
 }
 
 export interface VoiceCalendarResult {
-  intent: 'task_only' | 'calendar_only' | 'task_and_calendar'
+  intent: 'task_only' | 'calendar_only' | 'task_and_calendar' | 'needs_clarification'
   tasks: Array<{
     id: string
     title: string
@@ -39,6 +39,7 @@ export interface VoiceCalendarResult {
     isRepeatable?: boolean
   }>
   calendarEvents: CalendarEvent[]
+  clarifyingQuestions?: string[]
   confidence: number
 }
 
@@ -64,7 +65,13 @@ export class VoiceCalendarIntegration {
     this.apiKey = apiKey
   }
 
-  async processVoiceInput(transcript: string): Promise<VoiceCalendarResult> {
+  async processVoiceInput(transcript: string, clarifyThreshold?: number): Promise<VoiceCalendarResult> {
+    // Validate API key first
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      console.error('VoiceCalendarIntegration: No API key provided')
+      throw new Error('OpenAI API key is required')
+    }
+
     // First, determine if this needs calendar integration
     const needsCalendar = this.detectCalendarIntent(transcript)
     
@@ -82,6 +89,8 @@ export class VoiceCalendarIntegration {
     const prompt = this.buildCalendarPrompt(transcript)
     
     try {
+      console.log('VoiceCalendarIntegration: Making OpenAI API call with key:', this.apiKey.substring(0, 8) + '...')
+      
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -106,15 +115,76 @@ export class VoiceCalendarIntegration {
       })
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`)
+        const errorText = await response.text()
+        console.error('VoiceCalendarIntegration: OpenAI API error:', response.status, response.statusText, errorText)
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
-      const result = JSON.parse(data.choices[0].message.content)
+      console.log('VoiceCalendarIntegration: OpenAI response received:', data)
       
+      const raw = data.choices?.[0]?.message?.content
+      if (!raw) {
+        throw new Error('No content in OpenAI response')
+      }
+      
+      let result
+      try {
+        result = JSON.parse(raw)
+      } catch (e) {
+        console.error('VoiceCalendarIntegration: JSON parse error:', e, 'Raw content:', raw)
+        // Ask follow-up clarification when ambiguous
+        return {
+          intent: 'task_only',
+          tasks: await this.extractTasksOnly(transcript),
+          calendarEvents: [],
+          confidence: 0.4
+        }
+      }
+
+      // Determine threshold (settings or default 0.4)
+      const threshold = typeof clarifyThreshold === 'number' ? clarifyThreshold : 0.4
+      // Post-process: if low confidence or ambiguous, request clarifying questions
+      if (result.confidence <= threshold || !result.calendarEvents || result.calendarEvents.length === 0) {
+        // Attempt a second pass asking for clarification questions
+        try {
+          const clarify = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: 'Return JSON {"questions": ["question1", ...] } asking the minimum clarifying questions to schedule the user intent properly (time/day/recurrence). Keep it short.' },
+                { role: 'user', content: transcript }
+              ],
+              temperature: 0.2,
+              response_format: { type: 'json_object' }
+            })
+          })
+          if (clarify.ok) {
+            const c = await clarify.json()
+            const qs = JSON.parse(c.choices?.[0]?.message?.content || '{"questions":[]}')
+            if (Array.isArray(qs.questions) && qs.questions.length) {
+              // Encode questions into a special task so UI can prompt the user
+              return {
+                intent: 'task_only',
+                tasks: [{ id: `clarify_${Date.now()}`, title: `Need details: ${qs.questions.join(' • ')}`, summary: transcript, priority: 'MEDIUM', energy: 'MEDIUM', estimateMin: null }],
+                calendarEvents: [],
+                confidence: 0.5
+              }
+            }
+          }
+        } catch (clarifyError) {
+          console.error('VoiceCalendarIntegration: Clarification request failed:', clarifyError)
+        }
+      }
+
       return this.processCalendarResult(result)
     } catch (error) {
-      console.error('Voice calendar integration failed:', error)
+      console.error('VoiceCalendarIntegration: Processing failed:', error)
       // Fallback to task-only processing
       return {
         intent: 'task_only',
@@ -135,20 +205,36 @@ export class VoiceCalendarIntegration {
 
 IMPORTANT: You must respond with valid JSON only. No other text.
 
+CRITICAL RULES:
+1. If the voice input is ambiguous about timing, location, or specifics, you MUST set confidence to 0.4 or lower and create a clarifying question task instead of guessing.
+2. DO NOT split single requests into multiple tasks unless explicitly requested (e.g., "create 3 tasks for...")
+3. If someone says "every weekend" or similar recurring language, create ONE repeatable task/event, not multiple separate ones
+4. Be SKEPTICAL and ask questions for vague plans
+
 Analyze this voice input and determine:
-1. What tasks need to be created
+1. What tasks need to be created (DEFAULT: create ONE task unless explicitly told to create multiple)
 2. What calendar events need to be scheduled
 3. Any recurring patterns mentioned
+4. Whether the input is too vague and needs clarification
+
+ALWAYS ASK CLARIFYING QUESTIONS FOR:
+- Vague timing: "sometime this week", "on a day during the week", "later", "every weekend" (without specific time)
+- Unclear recurrence: "regularly", "often", "sometimes", "every week" (without specific day/time)
+- Missing specifics: "eat pizza" without time/day, "meeting" without details
+- Non-specific plans: "I want to eat pizza every week" (What day? What time? Where?)
+- Non-specific plans: "I want to go eat pizza every weekend" (What time? Which day of weekend? Where?)
+- Conflicting information: "every weekend at 6pm" (Saturday or Sunday or both?)
+- Generic recurring statements: "every week", "weekly" without specific day or time
 
 Key patterns to detect:
 - Time references: "every weekend", "daily", "weekly", "monthly", "every Monday"
-- Specific times: "morning", "afternoon", "evening", "at 3pm"  
+- Specific times: "morning", "afternoon", "evening", "at 3pm", "at 6pm"  
 - Duration estimates: "30 minutes", "1 hour", "quick task"
 - Priority indicators: "urgent", "important", "when I have time"
 - Energy levels: "easy task", "intensive work", "quick thing"
 
 For recurring patterns:
-- "every weekend" = weekly recurrence on Saturday/Sunday
+- "every weekend" = weekly recurrence on Saturday AND Sunday (both days)
 - "every weekday" = weekly recurrence Monday-Friday  
 - "every Monday" = weekly recurrence on Mondays
 - "daily" = daily recurrence
@@ -157,7 +243,7 @@ For recurring patterns:
 
 Response format:
 {
-  "intent": "task_only" | "calendar_only" | "task_and_calendar",
+  "intent": "task_only" | "calendar_only" | "task_and_calendar" | "needs_clarification",
   "tasks": [
     {
       "id": "unique_id",
@@ -181,19 +267,26 @@ Response format:
       "recurrence": {
         "type": "daily" | "weekly" | "monthly" | "yearly",
         "interval": number,
-        "daysOfWeek": [0,1,2,3,4,5,6] // 0=Sun, 6=Sat, null if not weekly
+        "daysOfWeek": [0,1,2,3,4,5,6], // 0=Sun, 6=Sat, for "every weekend" use [0,6]
         "count": number_of_occurrences_or_null
       } | null
     }
+  ],
+  "clarifyingQuestions": [
+    "What specific time?",
+    "Which day of the week?",
+    "How often should this repeat?"
   ],
   "confidence": 0.0_to_1.0
 }
 
 Examples:
-- "Go to grocery store every weekend" → task + weekly calendar events (Sat/Sun)
-- "Daily standup at 9am" → weekly calendar event (weekdays at 9am)
-- "Review project every Monday morning" → task + weekly calendar (Mondays 9am)
-- "Water plants twice a week" → task + custom recurrence
+- "Set a recurring reminder for Chick-fil-A every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
+- "I want to eat pizza every week" → needs_clarification, confidence 0.2, questions: ["What day of the week?", "What time?", "Which restaurant or location?"]
+- "I want to go eat pizza every weekend" → needs_clarification, confidence 0.2, questions: ["What time on the weekend?", "Saturday, Sunday, or both?", "Which restaurant?"]
+- "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
+- "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
+- "Review project every Monday morning at 9am" → ONE repeatable task + weekly calendar (Mondays 9am), confidence 0.9
 
 Current date/time context: ${new Date().toISOString()}
 User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
@@ -310,16 +403,33 @@ Voice input: "${transcript}"`;
           break
         case 'weekly':
           if (daysOfWeek && daysOfWeek.length > 0) {
-            // Find next day in daysOfWeek
-            const today = currentDate.getDay()
-            const nextDayIndex = daysOfWeek.findIndex(day => day > today)
-            if (nextDayIndex !== -1) {
-              const daysUntilNext = daysOfWeek[nextDayIndex] - today
-              currentDate = addDays(currentDate, daysUntilNext)
+            // Handle multiple days (e.g., weekend = Saturday + Sunday)
+            if (daysOfWeek.length > 1 && eventCount === 0) {
+              // For first occurrence, use the first day in the array
+              const firstDay = daysOfWeek[0]
+              const today = currentDate.getDay()
+              if (firstDay > today) {
+                currentDate = addDays(currentDate, firstDay - today)
+              } else {
+                currentDate = addDays(currentDate, (7 - today) + firstDay)
+              }
+            } else if (daysOfWeek.length > 1) {
+              // For subsequent occurrences, cycle through all days
+              const currentDay = currentDate.getDay()
+              const currentIndex = daysOfWeek.indexOf(currentDay)
+              if (currentIndex !== -1 && currentIndex < daysOfWeek.length - 1) {
+                // Move to next day in the same week
+                const nextDay = daysOfWeek[currentIndex + 1]
+                currentDate = addDays(currentDate, nextDay - currentDay)
+              } else {
+                // Move to first day of next week
+                const nextWeekFirstDay = daysOfWeek[0]
+                const daysUntilNextWeek = (7 - currentDay) + nextWeekFirstDay
+                currentDate = addDays(currentDate, daysUntilNextWeek)
+              }
             } else {
-              // Go to next week, first day
-              const daysUntilNextWeek = (7 - today) + daysOfWeek[0]
-              currentDate = addDays(currentDate, daysUntilNextWeek)
+              // Single day weekly recurrence
+              currentDate = addWeeks(currentDate, interval)
             }
           } else {
             currentDate = addWeeks(currentDate, interval)

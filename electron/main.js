@@ -241,15 +241,21 @@ function createWindow() {
   const candidatePorts = [3000, 3001, 3002, 3003, 3004, 3005]
   ;(async () => {
     for (const port of candidatePorts) {
-      const ok = await checkUrl(`http://localhost:${port}`, 500)
+      const ok = await checkUrl(`http://localhost:${port}`, 800)
       if (ok) {
         debugLog(`Loading client from detected port http://localhost:${port}`)
-        mainWindow.loadURL(`http://localhost:${port}`)
-        return
+        try {
+          await mainWindow.loadURL(`http://localhost:${port}`)
+          return
+        } catch (e) {
+          debugLog(`Error loading http://localhost:${port}:`, e.message)
+        }
       }
     }
-    // Fallback to default
-    mainWindow.loadURL('http://localhost:3000')
+    // Fallback to a lightweight splash instead of erroring
+    debugLog('No dev server detected, showing splash page while servers start...')
+    const splashHtml = `<!doctype html><html><body style="font-family:Segoe UI,Arial;background:#0f172a;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><div style="margin-bottom:12px;font-size:40px">🎯</div><div style="font-size:18px;margin-bottom:6px">Starting TaskerADHD…</div><div id="status" style="opacity:.7">Preparing UI…</div></div><script>(function(){var attempt=0;function ping(){attempt++;fetch('http://localhost:3000',{mode:'no-cors'}).then(function(){location.href='http://localhost:3000'}).catch(function(){document.getElementById('status').textContent='Preparing UI… ('+attempt+')'; setTimeout(ping,1200);});} ping();})();</script></body></html>`
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(splashHtml))
   })()
 
   // Handle external links

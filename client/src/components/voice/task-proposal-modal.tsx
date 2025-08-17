@@ -11,15 +11,16 @@ interface TaskProposalModalProps {
   onClose: () => void
   proposals: TaskShapingResult | null
   transcript: string
+  useStaging?: boolean
 }
 
-export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: TaskProposalModalProps) {
+export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useStaging = true }: TaskProposalModalProps) {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [editingTask, setEditingTask] = useState<string | null>(null)
   const [editedTasks, setEditedTasks] = useState<Map<string, Partial<TaskProposal>>>(new Map())
   const [isCreating, setIsCreating] = useState(false)
   
-  const { currentBoard } = useBoardStore()
+  const { currentBoard, createTask } = useBoardStore()
   const { addToStaging } = useStagingStore()
 
   // Select all tasks by default
@@ -61,11 +62,6 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
       return
     }
 
-    if (!currentBoard) {
-      toast.error('No board selected')
-      return
-    }
-
     setIsCreating(true)
     let successCount = 0
 
@@ -74,30 +70,45 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
         const finalTask = getTaskData(task)
         
         try {
-          // Send tasks to staging for intelligent processing
-          addToStaging({
-            title: finalTask.title,
-            summary: finalTask.summary,
-            priority: finalTask.priority,
-            energy: finalTask.energy,
-            dueAt: finalTask.dueAt,
-            estimateMin: finalTask.estimateMin,
-            labels: finalTask.labels || [],
-            subtasks: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            position: 0,
-            
-            // Staging-specific metadata
-            source: 'voice',
-            confidence: finalTask.confidence || 0.8,
-            suggestedImprovements: [],
-            relatedTasks: [],
-            suggestedLabels: finalTask.labels || []
-          })
-          successCount++
+          if (currentBoard && !useStaging) {
+            // Create directly on the current board when staging is OFF
+            await createTask({
+              title: finalTask.title,
+              summary: finalTask.summary,
+              priority: finalTask.priority as any,
+              energy: finalTask.energy as any,
+              dueAt: finalTask.dueAt,
+              estimateMin: finalTask.estimateMin,
+              isRepeatable: finalTask.isRepeatable || false
+            })
+            successCount++
+          } else {
+            // Send to staging when staging is ON or no board available
+            addToStaging({
+              title: finalTask.title,
+              summary: finalTask.summary,
+              priority: finalTask.priority,
+              energy: finalTask.energy,
+              dueAt: finalTask.dueAt,
+              estimateMin: finalTask.estimateMin,
+              labels: finalTask.labels || [],
+              subtasks: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              position: 0,
+              isRepeatable: finalTask.isRepeatable,
+              
+              // Staging-specific metadata
+              source: 'voice',
+              confidence: finalTask.confidence || 0.8,
+              suggestedImprovements: [],
+              relatedTasks: [],
+              suggestedLabels: finalTask.labels || []
+            })
+            successCount++
+          }
         } catch (error) {
-          console.error('Failed to stage task:', finalTask.title, error)
+          console.error('Failed to create task:', finalTask.title, error)
         }
       }
 
@@ -338,6 +349,13 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript }: Ta
                         {finalTask.dueAt && (
                           <span className="text-xs bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded">
                             📅 {new Date(finalTask.dueAt).toLocaleDateString()}
+                          </span>
+                        )}
+
+                        {/* Repeatable Indicator */}
+                        {finalTask.isRepeatable && (
+                          <span className="text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
+                            🔄 Repeatable
                           </span>
                         )}
                       </div>

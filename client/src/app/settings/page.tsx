@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { useTheme } from '@/components/providers'
 import { useSettingsStore } from '@/stores/settings'
 import { AppLayout } from '@/components/layout/app-layout'
+
 
 // Force dynamic rendering to avoid localStorage issues during prerendering
 export const dynamic = 'force-dynamic'
@@ -22,10 +23,16 @@ export default function SettingsPage() {
     }
   }, [settings.debugMode])
 
-  // Load current timezone
+  // Load current timezone (client-only)
   useEffect(() => {
-    const savedTimezone = localStorage.getItem('userTimezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
-    setTimezone(savedTimezone)
+    try {
+      if (typeof window !== 'undefined') {
+        const savedTimezone = localStorage.getItem('userTimezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
+        setTimezone(savedTimezone)
+      }
+    } catch {
+      // noop
+    }
   }, [])
   
   // Simple page load tracking
@@ -67,7 +74,6 @@ export default function SettingsPage() {
 
   return (
     <AppLayout title="Settings">
-      <CurrentTimeDisplay />
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8">
@@ -159,6 +165,34 @@ export default function SettingsPage() {
                   />
                 </button>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Time Format
+                </label>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => settings.updateSettings({ timeFormat: '12h' })}
+                    className={`px-4 py-2 rounded-md text-sm font-medium ${
+                      settings.timeFormat === '12h' 
+                        ? 'bg-primary-600 text-white' 
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    12 Hour (AM/PM)
+                  </button>
+                  <button
+                    onClick={() => settings.updateSettings({ timeFormat: '24h' })}
+                    className={`px-4 py-2 rounded-md text-sm font-medium ${
+                      settings.timeFormat === '24h' 
+                        ? 'bg-primary-600 text-white' 
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    24 Hour
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -205,6 +239,35 @@ export default function SettingsPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">🔑 API Configuration</h2>
             <div className="space-y-6">
+              {/* AI Clarification Threshold */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Clarifying Questions Sensitivity
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Ask follow-up questions when AI confidence is at or below this value (0.1 = very skeptical, 0.9 = rarely asks).
+                </p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={0.9}
+                    step={0.05}
+                    defaultValue={settings.voiceSettings.aiClarifyThreshold ?? 0.4}
+                    onChange={(e) => settings.setVoiceSettings({ aiClarifyThreshold: Number(e.target.value) })}
+                    className="w-64"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300 w-14">
+                    {(settings.voiceSettings.aiClarifyThreshold ?? 0.4).toFixed(2)}
+                  </span>
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => settings.setVoiceSettings({ aiClarifyThreshold: 0.4 })}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
               {/* OpenAI API Key */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -215,7 +278,7 @@ export default function SettingsPage() {
                     type="password"
                     placeholder="sk-..."
                     className="input flex-1"
-                    defaultValue={localStorage.getItem('openai_api_key') || ''}
+                    defaultValue={typeof window !== 'undefined' ? (localStorage.getItem('openai_api_key') || '') : ''}
                     id="openai-key"
                   />
                   <button
@@ -307,7 +370,7 @@ export default function SettingsPage() {
                     type="password"
                     placeholder="dgk-..."
                     className="input flex-1"
-                    defaultValue={localStorage.getItem('deepgram_api_key') || ''}
+                    defaultValue={typeof window !== 'undefined' ? (localStorage.getItem('deepgram_api_key') || '') : ''}
                     id="deepgram-key"
                   />
                   <button
@@ -385,6 +448,87 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Data Export / Import */}
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">🗄️ Data Export / Import</h2>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Export or import your local data. This includes time tracking entries, local calendar events created via voice, and app settings. No server is involved.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    try {
+                      const data = {
+                        version: 1,
+                        exportedAt: new Date().toISOString(),
+                        settings: localStorage.getItem('taskeradhd-settings') ? JSON.parse(localStorage.getItem('taskeradhd-settings') as string) : null,
+                        timeTracking: localStorage.getItem('taskeradhd-time-tracking') ? JSON.parse(localStorage.getItem('taskeradhd-time-tracking') as string) : null,
+                        calendarEvents: localStorage.getItem('calendarEvents') ? JSON.parse(localStorage.getItem('calendarEvents') as string) : []
+                      }
+                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `taskeradhd-export-${Date.now()}.json`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                      URL.revokeObjectURL(url)
+                      toast.success('Data exported')
+                    } catch (e) {
+                      console.error(e)
+                      toast.error('Export failed')
+                    }
+                  }}
+                >
+                  ⬇️ Export Local Data
+                </button>
+
+                <label className="btn-ghost cursor-pointer">
+                  ⬆️ Import Local Data
+                  <input
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      try {
+                        if (!file) return
+                        const text = await file.text()
+                        const parsed = JSON.parse(text)
+                        // Settings
+                        if (parsed.settings) {
+                          localStorage.setItem('taskeradhd-settings', JSON.stringify(parsed.settings))
+                        }
+                        // Time tracking (let the store handle dates on merge via its merge/partialize)
+                        if (parsed.timeTracking) {
+                          localStorage.setItem('taskeradhd-time-tracking', JSON.stringify(parsed.timeTracking))
+                        }
+                        // Calendar events
+                        if (Array.isArray(parsed.calendarEvents)) {
+                          localStorage.setItem('calendarEvents', JSON.stringify(parsed.calendarEvents))
+                          try { window.dispatchEvent(new Event('calendarEventsUpdated')) } catch {}
+                        }
+                        toast.success('Import complete. Reloading...')
+                        setTimeout(() => window.location.reload(), 800)
+                      } catch (err) {
+                        console.error(err)
+                        toast.error('Import failed')
+                      } finally {
+                        e.currentTarget.value = ''
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Tip: You can also back up individual areas via browser dev tools → Application → Local Storage.
+              </p>
             </div>
           </section>
 

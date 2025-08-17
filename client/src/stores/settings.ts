@@ -23,10 +23,12 @@ const defaultSettings: UserSettings = {
   reducedMotion: false,
   highContrast: false,
   focusMode: false,
+  timeFormat: '12h', // '12h' or '24h'
   voiceSettings: {
     autoStart: false,
     wakeWord: false,
-    language: 'en-US'
+    language: 'en-US',
+    aiClarifyThreshold: 0.4
   },
   taskPreferences: {
     defaultEnergy: 'MEDIUM',

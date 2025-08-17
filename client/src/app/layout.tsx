@@ -72,6 +72,28 @@ export default function RootLayout({
         {/* Accessibility meta tags */}
         <meta name="color-scheme" content="light dark" />
         <meta name="supported-color-schemes" content="light dark" />
+        {/* Prevent theme flash: set initial theme class before hydration */}
+        <script
+          dangerouslySetInnerHTML={{ __html: `
+            (function(){
+              try {
+                var stored = localStorage.getItem('taskeradhd-settings');
+                var theme = null;
+                if (stored) {
+                  var parsed = JSON.parse(stored);
+                  if (parsed && parsed.state && parsed.state.theme) theme = parsed.state.theme;
+                  if (!theme && parsed.theme) theme = parsed.theme;
+                }
+                if (!theme) {
+                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                var doc = document.documentElement;
+                doc.classList.remove('light','dark','low-stim');
+                doc.classList.add(theme);
+              } catch(e){}
+            })();
+          `}}
+        />
         
         {/* Progressive Web App meta */}
         <meta name="mobile-web-app-capable" content="yes" />
@@ -80,8 +102,8 @@ export default function RootLayout({
         className={`
           ${inter.className} 
           antialiased 
-          bg-gray-50 
-          text-gray-900 
+          bg-gray-50 dark:bg-gray-900 
+          text-gray-900 dark:text-gray-100 
           selection:bg-primary-100 
           selection:text-primary-900
           focus-within:outline-none

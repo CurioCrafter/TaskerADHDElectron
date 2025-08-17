@@ -6,10 +6,13 @@ import { useBoardStore } from '@/stores/board'
 import { useSettingsStore } from '@/stores/settings'
 import { useTimeTrackingStore } from '@/stores/timeTracking'
 import { AppLayout } from '@/components/layout/app-layout'
-import { CurrentTimeDisplay } from '@/components/time-tracking/current-time-display'
+import { TimeDisplay } from '@/components/ui/time-display'
 import { TimeEntryEditor } from '@/components/time-tracking/time-entry-editor'
 import { format } from 'date-fns'
 import type { Task } from '@/types'
+
+// Force dynamic rendering to avoid SSR/localStorage mismatches
+export const dynamic = 'force-dynamic'
 
 interface TimeEntry {
   id: string
@@ -37,12 +40,49 @@ export default function TimeTrackPage() {
     getTaskLog,
     getTopTasks
   } = useTimeTrackingStore()
+
+  const exportData = () => {
+    const data = {
+      timeEntries: useTimeTrackingStore.getState().timeEntries,
+      timeLogs: useTimeTrackingStore.getState().timeLogs,
+      exportedAt: new Date().toISOString(),
+      version: 1
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `taskeradhd-time-export-${Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const importData = async (file: File) => {
+    const text = await file.text()
+    try {
+      const parsed = JSON.parse(text)
+      if (!parsed || !Array.isArray(parsed.timeEntries)) throw new Error('Invalid file format')
+      useTimeTrackingStore.getState().importTimeEntries(parsed.timeEntries.map((e: any) => ({
+        ...e,
+        startTime: new Date(e.startTime),
+        endTime: e.endTime ? new Date(e.endTime) : undefined
+      })))
+      toast.success('Imported time entries successfully')
+    } catch (e) {
+      toast.error('Failed to import: ' + (e as any).message)
+    }
+  }
   
   const [selectedBoard, setSelectedBoard] = useState<string>('all')
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [view, setView] = useState<'timer' | 'log' | 'analytics'>('timer')
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
+
+  // Mounted guard to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false)
 
   // Debug logging
   useEffect(() => {
@@ -63,6 +103,26 @@ export default function TimeTrackPage() {
     }, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Ensure first render matches server output
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <AppLayout title="Time Tracking">
+        <div className="p-6">
+          <div className="flex items-center justify-center min-h-[40vh]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto mb-3" />
+              <p className="text-gray-600 dark:text-gray-400">Loading…</p>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   // No need for manual localStorage management - handled by store
 
@@ -295,9 +355,9 @@ export default function TimeTrackPage() {
     return (
       <AppLayout title="Time Tracking">
         <div className="p-6">
-          <div className="flex items-center justify-center min-h-[400px]">
+          <div className="flex items-center justify-center min-h-[40vh]">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto mb-3" />
               <p className="text-gray-600 dark:text-gray-400">Loading time tracking...</p>
             </div>
           </div>
@@ -308,7 +368,6 @@ export default function TimeTrackPage() {
 
   return (
     <AppLayout title="Time Tracking">
-      <CurrentTimeDisplay />
       <div className="p-6">
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -413,6 +472,25 @@ export default function TimeTrackPage() {
             </div>
           </div>
         )}
+
+        {/* Import/Export Controls */}
+        <div className="mt-6 flex items-center gap-3">
+          <button onClick={exportData} className="btn-secondary">⬇️ Export Time Data</button>
+          <label className="btn-ghost cursor-pointer">
+            ⬆️ Import Time Data
+            <input
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) importData(file)
+                e.currentTarget.value = ''
+              }}
+            />
+          </label>
+          <span className="text-xs text-gray-500 dark:text-gray-400">JSON export is local-only; no server required</span>
+        </div>
 
         {/* Time Entry Editor Modal */}
         {editingEntry && (
