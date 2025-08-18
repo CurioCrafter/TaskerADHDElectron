@@ -32,11 +32,11 @@ const CreateTaskSchema = z.object({
   summary: z.string().max(1000).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   energy: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  dueAt: z.string().datetime().optional(),
-  estimateMin: z.number().int().min(1).max(1440).optional(), // Max 24 hours
+  dueAt: z.string().datetime().nullable().optional().transform(val => val === null ? undefined : val),
+  estimateMin: z.number().int().min(1).max(1440).nullable().optional().transform(val => val === null ? undefined : val), // Max 24 hours
   columnId: z.string().cuid(),
-  labels: z.array(z.string()).optional(),
-  subtasks: z.array(z.string()).optional(),
+  labels: z.array(z.string()).nullable().optional().transform(val => val === null ? [] : val),
+  subtasks: z.array(z.string()).nullable().optional().transform(val => val === null ? [] : val),
   transcriptId: z.string().cuid().optional(),
   // Repeat fields - handle null values properly
   isRepeatable: z.boolean().optional(),
@@ -52,9 +52,9 @@ const UpdateTaskSchema = z.object({
   summary: z.string().max(1000).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   energy: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  dueAt: z.string().datetime().optional(),
-  estimateMin: z.number().int().min(1).max(1440).optional(),
-  labels: z.array(z.string()).optional(),
+  dueAt: z.string().datetime().nullable().optional().transform(val => val === null ? undefined : val),
+  estimateMin: z.number().int().min(1).max(1440).nullable().optional().transform(val => val === null ? undefined : val),
+  labels: z.array(z.string()).nullable().optional().transform(val => val === null ? [] : val),
   // Repeat fields - handle null values properly
   isRepeatable: z.boolean().optional(),
   repeatPattern: z.enum(['daily', 'weekly', 'monthly', 'custom']).optional(),
