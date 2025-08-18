@@ -237,8 +237,16 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         willShowChat: result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)
       })
       
+      // Debug: log what we're about to do
+      console.log('🔧 [VOICE] Action decision:', {
+        showClarificationChat: result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold),
+        showCalendarProposals: result.calendarEvents && result.calendarEvents.length > 0,
+        showTaskProposals: result.tasks && result.tasks.length > 0
+      })
+      
       if (result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)) {
         // Show clarification chat - either explicit clarification needed or low confidence
+        console.log('🔧 [VOICE] Opening clarification chat with questions:', result.clarifyingQuestions)
         const questions = result.clarifyingQuestions || [
           'What specific time?',
           'Which day(s) of the week?',
@@ -247,6 +255,7 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         ]
         setClarificationQuestions(questions)
         setShowClarificationChat(true)
+        console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
         toast.success('🤔 AI needs more details. Let\'s chat about it!')
         return
       }

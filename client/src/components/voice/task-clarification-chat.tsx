@@ -34,9 +34,19 @@ export function TaskClarificationChat({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Debug: log props
+  console.log('🔧 [CHAT] TaskClarificationChat props:', {
+    isOpen,
+    originalTranscript,
+    initialQuestions: initialQuestions?.length || 0,
+    onTaskCreated: !!onTaskCreated
+  })
+
   // Initialize chat with AI questions
   useEffect(() => {
+    console.log('🔧 [CHAT] useEffect triggered:', { isOpen, initialQuestionsLength: initialQuestions?.length || 0 })
     if (isOpen && initialQuestions.length > 0) {
+      console.log('🔧 [CHAT] Setting up initial messages with questions:', initialQuestions)
       const aiMessages = initialQuestions.map((question, index) => ({
         id: `ai-${index}`,
         type: 'ai' as const,

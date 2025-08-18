@@ -73,12 +73,19 @@ export default function CalendarPage() {
 
   // Listen for local calendar event updates (from voice modal storing events)
   useEffect(() => {
-    const handler = () => setCurrentDate((d) => new Date(d.getTime()))
+    const handler = () => {
+      console.log('🔧 [CALENDAR] Received calendarEventsUpdated event, refreshing...')
+      setCurrentDate((d) => new Date(d.getTime()))
+    }
     if (typeof window !== 'undefined') {
+      console.log('🔧 [CALENDAR] Adding event listener for calendarEventsUpdated')
       window.addEventListener('calendarEventsUpdated', handler)
     }
     return () => {
-      if (typeof window !== 'undefined') window.removeEventListener('calendarEventsUpdated', handler)
+      if (typeof window !== 'undefined') {
+        console.log('🔧 [CALENDAR] Removing event listener for calendarEventsUpdated')
+        window.removeEventListener('calendarEventsUpdated', handler)
+      }
     }
   }, [])
 

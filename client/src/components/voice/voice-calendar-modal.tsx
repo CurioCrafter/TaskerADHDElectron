@@ -103,27 +103,39 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
               estimateMin: task.estimateMin,
               dueAt: task.dueAt,
               isRepeatable: task.isRepeatable || false,
-              repeatPattern: task.repeatPattern,
-              repeatInterval: task.repeatInterval,
-              repeatDays: task.repeatDays,
-              repeatCount: task.repeatCount,
-              repeatEndDate: task.repeatEndDate
+              ...(task.repeatPattern && { repeatPattern: task.repeatPattern }),
+              ...(task.repeatInterval && { repeatInterval: task.repeatInterval }),
+              ...(task.repeatDays && { repeatDays: task.repeatDays }),
+              ...(task.repeatCount && { repeatCount: task.repeatCount }),
+              ...(task.repeatEndDate && { repeatEndDate: task.repeatEndDate })
             })
             tasksCreated++
           } else if (useStaging) {
             // Add to staging only when staging is ON
             addToStaging({
-              type: 'task',
-              data: {
-                ...task,
-                repeatPattern: task.repeatPattern,
-                repeatInterval: task.repeatInterval,
-                repeatDays: task.repeatDays,
-                repeatCount: task.repeatCount,
-                repeatEndDate: task.repeatEndDate
-              },
-              source: 'voice-calendar',
-              transcript
+              title: task.title,
+              summary: task.summary,
+              priority: task.priority,
+              energy: task.energy,
+              dueAt: task.dueAt,
+              estimateMin: task.estimateMin,
+              isRepeatable: task.isRepeatable || false,
+              ...(task.repeatPattern && { repeatPattern: task.repeatPattern }),
+              ...(task.repeatInterval && { repeatInterval: task.repeatInterval }),
+              ...(task.repeatDays && { repeatDays: task.repeatDays }),
+              ...(task.repeatCount && { repeatCount: task.repeatCount }),
+              ...(task.repeatEndDate && { repeatEndDate: task.repeatEndDate }),
+              position: 0,
+              labels: [],
+              subtasks: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              source: 'voice',
+              confidence: proposals.confidence || 0.8,
+              suggestedImprovements: [],
+              detectedCategory: 'personal',
+              suggestedLabels: [],
+              relatedTasks: []
             })
             tasksCreated++
           } else {
@@ -137,11 +149,11 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
                 estimateMin: task.estimateMin,
                 dueAt: task.dueAt,
                 isRepeatable: task.isRepeatable || false,
-                repeatPattern: task.repeatPattern,
-                repeatInterval: task.repeatInterval,
-                repeatDays: task.repeatDays,
-                repeatCount: task.repeatCount,
-                repeatEndDate: task.repeatEndDate
+                ...(task.repeatPattern && { repeatPattern: task.repeatPattern }),
+                ...(task.repeatInterval && { repeatInterval: task.repeatInterval }),
+                ...(task.repeatDays && { repeatDays: task.repeatDays }),
+                ...(task.repeatCount && { repeatCount: task.repeatCount }),
+                ...(task.repeatEndDate && { repeatEndDate: task.repeatEndDate })
               })
               tasksCreated++
             }
@@ -199,7 +211,13 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
     
     localStorage.setItem('calendarEvents', JSON.stringify(existingEvents))
     // Notify any open pages to refresh calendar view
-    try { window.dispatchEvent(new Event('calendarEventsUpdated')) } catch {}
+    console.log('🔧 [CALENDAR] Dispatching calendarEventsUpdated event')
+    try { 
+      window.dispatchEvent(new Event('calendarEventsUpdated')) 
+      console.log('✅ [CALENDAR] Event dispatched successfully')
+    } catch (error) {
+      console.error('❌ [CALENDAR] Failed to dispatch event:', error)
+    }
   }
 
   const formatRecurrence = (event: CalendarEvent): string => {

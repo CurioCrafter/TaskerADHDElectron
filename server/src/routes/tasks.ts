@@ -38,13 +38,13 @@ const CreateTaskSchema = z.object({
   labels: z.array(z.string()).optional(),
   subtasks: z.array(z.string()).optional(),
   transcriptId: z.string().cuid().optional(),
-  // Repeat fields
+  // Repeat fields - handle null values properly
   isRepeatable: z.boolean().optional(),
   repeatPattern: z.enum(['daily', 'weekly', 'monthly', 'custom']).optional(),
-  repeatInterval: z.number().int().min(1).max(365).optional(),
-  repeatDays: z.array(z.number().int().min(0).max(6)).optional(),
-  repeatEndDate: z.string().datetime().optional(),
-  repeatCount: z.number().int().min(1).max(1000).optional()
+  repeatInterval: z.number().int().min(1).max(365).nullable().optional().transform(val => val === null ? undefined : val),
+  repeatDays: z.array(z.number().int().min(0).max(6)).nullable().optional().transform(val => val === null ? undefined : val),
+  repeatEndDate: z.string().datetime().nullable().optional().transform(val => val === null ? undefined : val),
+  repeatCount: z.number().int().min(1).max(1000).nullable().optional().transform(val => val === null ? undefined : val)
 });
 
 const UpdateTaskSchema = z.object({
@@ -55,13 +55,13 @@ const UpdateTaskSchema = z.object({
   dueAt: z.string().datetime().optional(),
   estimateMin: z.number().int().min(1).max(1440).optional(),
   labels: z.array(z.string()).optional(),
-  // Repeat fields
+  // Repeat fields - handle null values properly
   isRepeatable: z.boolean().optional(),
   repeatPattern: z.enum(['daily', 'weekly', 'monthly', 'custom']).optional(),
-  repeatInterval: z.number().int().min(1).max(365).optional(),
-  repeatDays: z.array(z.number().int().min(0).max(6)).optional(),
-  repeatEndDate: z.string().datetime().optional(),
-  repeatCount: z.number().int().min(1).max(1000).optional()
+  repeatInterval: z.number().int().min(1).max(365).nullable().optional().transform(val => val === null ? undefined : val),
+  repeatDays: z.array(z.number().int().min(0).max(6)).nullable().optional().transform(val => val === null ? undefined : val),
+  repeatEndDate: z.string().datetime().nullable().optional().transform(val => val === null ? undefined : val),
+  repeatCount: z.number().int().min(1).max(1000).nullable().optional().transform(val => val === null ? undefined : val)
 });
 
 const MoveTaskSchema = z.object({

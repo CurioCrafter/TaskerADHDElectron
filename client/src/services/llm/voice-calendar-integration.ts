@@ -37,6 +37,14 @@ export interface VoiceCalendarResult {
     estimateMin?: number
     dueAt?: string
     isRepeatable?: boolean
+    // Add all repeatable fields to match TaskProposal interface
+    repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+    repeatInterval?: number
+    repeatDays?: number[]
+    repeatEndDate?: string
+    repeatCount?: number
+    parentTaskId?: string
+    nextDueDate?: string
   }>
   calendarEvents: CalendarEvent[]
   clarifyingQuestions?: string[]
