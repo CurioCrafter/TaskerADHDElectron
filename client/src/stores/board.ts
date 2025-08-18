@@ -51,6 +51,7 @@ interface BoardState {
   moveTask: (taskId: string, columnId: string, position: number) => Promise<void>
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (taskId: string) => Promise<void>
+  purgeDemoTasks: () => Promise<void>
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -487,6 +488,59 @@ export const useBoardStore = create<BoardState>()(
           }
         } catch (error) {
           set({ error: 'Network error', isLoading: false })
+        }
+      },
+
+      // Purge demo tasks
+      purgeDemoTasks: async () => {
+        set({ isLoading: true, error: null })
+
+        try {
+          const { boards } = get()
+          let deletedCount = 0
+
+          // Go through all boards and delete demo tasks
+          for (const board of boards) {
+            if (board.columns) {
+              for (const column of board.columns) {
+                if (column.tasks) {
+                  // Find demo tasks (they have titles that match our example tasks)
+                  const demoTaskTitles = [
+                    'Daily Standup',
+                    'Weekly Review', 
+                    'Monthly Budget Review',
+                    'Grocery Shopping',
+                    'Project Deadline'
+                  ]
+                  
+                  for (const task of column.tasks) {
+                    if (demoTaskTitles.includes(task.title)) {
+                      try {
+                        await get().deleteTask(task.id)
+                        deletedCount++
+                      } catch (error) {
+                        console.log('Failed to delete demo task:', task.title, error)
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Refresh boards to reflect changes
+          await get().fetchBoards()
+          
+          set({ isLoading: false })
+          console.log(`🗑️ [BOARD] Purged ${deletedCount} demo tasks`)
+          
+          // Dispatch event to notify calendar that tasks have been updated
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('taskUpdated'))
+          }
+        } catch (error) {
+          console.error('Failed to purge demo tasks:', error)
+          set({ error: 'Failed to purge demo tasks', isLoading: false })
         }
       }
     }),

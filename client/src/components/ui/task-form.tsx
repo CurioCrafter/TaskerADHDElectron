@@ -26,9 +26,10 @@ interface TaskFormProps {
 	}) => void
 	isLoading?: boolean
 	boardId?: string
+	initialDueDate?: string // Add this prop for pre-filling due date
 }
 
-export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId }: TaskFormProps) {
+export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId, initialDueDate }: TaskFormProps) {
 	const [title, setTitle] = useState('')
 	const [summary, setSummary] = useState('')
 	const [priority, setPriority] = useState<TaskPriority | ''>('')
@@ -52,6 +53,13 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 			setRepeatCount('')
 		}
 	}, [isOpen])
+	
+	// Set initial due date when provided
+	useEffect(() => {
+		if (initialDueDate) {
+			setDueAt(initialDueDate)
+		}
+	}, [initialDueDate])
 	const [energy, setEnergy] = useState<EnergyLevel | ''>('')
 	const [dueAt, setDueAt] = useState('')
 	const [estimateMin, setEstimateMin] = useState('')

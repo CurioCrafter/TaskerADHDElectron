@@ -532,6 +532,38 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* Demo Tasks Management */}
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">🧪 Demo Tasks</h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                  Demo tasks are automatically created when you first use the app to help you understand how different features work, including repeatable tasks, priorities, and energy levels.
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Once you're comfortable with the app, you can remove these demo tasks to clean up your workspace.
+                </p>
+                <button
+                  onClick={async () => {
+                    if (confirm('This will permanently delete all demo tasks. This action cannot be undone. Continue?')) {
+                      try {
+                        const { purgeDemoTasks } = await import('@/stores/board')
+                        await purgeDemoTasks()
+                        toast.success('Demo tasks removed successfully!')
+                      } catch (error) {
+                        console.error('Failed to purge demo tasks:', error)
+                        toast.error('Failed to remove demo tasks')
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors"
+                >
+                  🗑️ Remove All Demo Tasks
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* System Controls */}
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">🔧 System Controls</h2>

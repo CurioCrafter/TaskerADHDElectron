@@ -215,24 +215,46 @@ export default function CalendarPage() {
     return allTasks
   }
 
-  // Get example tasks for demonstration (when no real tasks exist)
-  const getExampleTasks = (): (Task & { boardName: string; boardId: string })[] => {
-    // Only show examples if no real tasks exist
-    const realTasks = getAllTasksWithDates()
-    if (realTasks.length > 0) return []
+
+
+  // Add demo tasks to board store if no real tasks exist
+  useEffect(() => {
+    const addDemoTasksIfNeeded = async () => {
+      const realTasks = getAllTasksWithDates()
+      if (realTasks.length === 0 && boards && boards.length > 0) {
+        // Set the first board as current board for demo task creation
+        const defaultBoard = boards[0]
+        const { setCurrentBoard, createTask } = useBoardStore.getState()
+        
+        // Temporarily set the default board as current
+        setCurrentBoard(defaultBoard)
+        
+        for (const exampleTask of EXAMPLE_TASKS) {
+          try {
+            await createTask({
+              title: exampleTask.title,
+              summary: exampleTask.summary,
+              priority: exampleTask.priority,
+              energy: exampleTask.energy,
+              dueAt: exampleTask.dueAt,
+              estimateMin: exampleTask.estimateMin,
+              isRepeatable: exampleTask.isRepeatable,
+              repeatPattern: exampleTask.repeatPattern,
+              repeatInterval: exampleTask.repeatInterval,
+              repeatDays: exampleTask.repeatDays,
+              columnId: defaultBoard.columns?.[0]?.id || 'default'
+            })
+          } catch (error) {
+            console.log('Demo task already exists or failed to create:', exampleTask.title)
+          }
+        }
+      }
+    }
     
-    return EXAMPLE_TASKS.map((task, index) => ({
-      ...task,
-      id: `example-${index}`,
-      boardId: task.boardId,
-      columnId: 'example-column',
-      position: index,
-      labels: [],
-      subtasks: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }))
-  }
+    if (boards && boards.length > 0) {
+      addDemoTasksIfNeeded()
+    }
+  }, [boards])
 
   // Handle opening task form for a specific date
   const handleAddTaskForDate = (date: Date) => {
@@ -372,11 +394,9 @@ export default function CalendarPage() {
   // Get all tasks including recurring instances for a date range
   const getAllTasksWithRecurring = (startDate: Date, endDate: Date) => {
     const baseTasks = getAllTasksWithDates()
-    const exampleTasks = getExampleTasks()
-    const allTasks = [...baseTasks, ...exampleTasks]
     const allInstances: (Task & { boardName: string; boardId: string })[] = []
     
-    allTasks.forEach(task => {
+    baseTasks.forEach(task => {
       if (task.isRepeatable) {
         const instances = generateRecurringInstances(task, startDate, endDate)
         allInstances.push(...instances)
@@ -937,13 +957,13 @@ export default function CalendarPage() {
         </div>
         
         {/* Example Tasks Note */}
-        {getExampleTasks().length > 0 && (
+        {getAllTasksWithDates().length === 0 && (
           <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg">
             <div className="flex items-center space-x-2 text-purple-800 dark:text-purple-200">
               <span className="text-lg">💡</span>
               <div>
-                <p className="font-medium">Example Tasks Loaded</p>
-                <p className="text-sm opacity-90">These are demonstration tasks showing different types including repeatable patterns. Create your own tasks to replace them!</p>
+                <p className="font-medium">No Tasks Yet</p>
+                <p className="text-sm opacity-90">Demo tasks will be automatically created when you first load the app. Create your own tasks to get started!</p>
               </div>
             </div>
           </div>
@@ -972,6 +992,7 @@ export default function CalendarPage() {
           }}
           onSubmit={handleTaskFormSubmit}
           boardId={boards?.[0]?.id}
+          initialDueDate={selectedDateForNewTask.toISOString()}
         />
       )}
     </AppLayout>

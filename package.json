@@ -12,7 +12,7 @@
     "build:client": "cd client && npm run build",
     "build:server": "cd server && npm run build",
     "build:electron": "electron-builder",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --win --mac --linux",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
@@ -69,7 +69,6 @@
     },
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
@@ -77,8 +76,7 @@
     },
     "linux": {
       "target": ["AppImage", "deb"],
-      "category": "Utility",
-      "icon": "assets/icon.png"
+      "category": "Utility"
     }
   },
   "repository": {

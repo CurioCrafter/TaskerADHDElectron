@@ -95,11 +95,19 @@ export class VoiceCalendarIntegration {
       return false
     }
     
-    // Common vague patterns that should always trigger clarification
-    const vaguePatterns = [
+    // Check for smart default patterns that should NOT force clarification
+    const smartDefaultPatterns = [
       'every week',
       'every weekend', 
       'weekly',
+      'monthly',
+      'daily'
+    ]
+    
+    const hasSmartDefaults = smartDefaultPatterns.some(pattern => lowerTranscript.includes(pattern))
+    
+    // Common vague patterns that should always trigger clarification
+    const vaguePatterns = [
       'regularly',
       'often',
       'sometimes',
@@ -112,7 +120,19 @@ export class VoiceCalendarIntegration {
       'next week'
     ]
     
-    return vaguePatterns.some(pattern => lowerTranscript.includes(pattern))
+    const isVague = vaguePatterns.some(pattern => lowerTranscript.includes(pattern))
+    
+    // Don't force clarification if we have smart defaults, even if other patterns are vague
+    if (hasSmartDefaults) {
+      console.log('🔧 [VOICE] Input has smart defaults - not forcing clarification:', {
+        hasSmartDefaults,
+        isVague,
+        smartDefaultPatterns: smartDefaultPatterns.filter(pattern => lowerTranscript.includes(pattern))
+      })
+      return false
+    }
+    
+    return isVague
   }
 
   async processVoiceInput(transcript: string, clarifyThreshold: number = 0.4): Promise<VoiceCalendarResult> {
@@ -318,13 +338,17 @@ CRITICAL RULES:
 5. If the input already contains specific time, day, and action details, DO NOT ask for clarification - proceed with task creation
 
 ALWAYS ASK CLARIFYING QUESTIONS FOR:
-- Vague timing: "sometime this week", "on a day during the week", "later", "every weekend" (without specific time)
-- Unclear recurrence: "regularly", "often", "sometimes", "every week" (without specific day/time)
+- Vague timing: "sometime this week", "on a day during the week", "later"
+- Unclear recurrence: "regularly", "often", "sometimes"
 - Missing specifics: "eat pizza" without time/day, "meeting" without details
-- Non-specific plans: "I want to eat pizza every week" (What day? What time? Where?)
-- Non-specific plans: "I want to go eat pizza every weekend" (What time? Which day of weekend? Where?)
 - Conflicting information: "every weekend at 6pm" (Saturday or Sunday or both?)
-- Generic recurring statements: "every week", "weekly" without specific day or time
+
+SMART DEFAULTS - DON'T ASK CLARIFICATION FOR:
+- "every week" → Set to next Monday at 9am, weekly repeat
+- "every weekend" → Set to next Saturday at 10am, weekly repeat on weekends [0,6]
+- "weekly" → Set to next Monday at 9am, weekly repeat
+- "monthly" → Set to next month same day, monthly repeat
+- "daily" → Set to tomorrow at 9am, daily repeat
 
 DO NOT ASK CLARIFICATION FOR:
 - Specific meetings: "meeting next monday at 11am" (has time, day, and action)
@@ -396,8 +420,10 @@ Response format:
 Examples:
 - "Set a recurring reminder for Chick-fil-A every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
   Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
-- "I want to eat pizza every week" → needs_clarification, confidence 0.2, questions: ["What day of the week?", "What time?", "Which restaurant or location?"]
-- "I want to go eat pizza every weekend" → needs_clarification, confidence 0.2, questions: ["What time on the weekend?", "Saturday, Sunday, or both?", "Which restaurant?"]
+- "I want to eat pizza every week" → SMART DEFAULT: Set to next Monday at 9am, weekly repeat, confidence 0.8
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], dueAt: "next-monday-9am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
+- "I want to go eat pizza every weekend" → SMART DEFAULT: Set to next Saturday at 10am, weekly repeat on weekends, confidence 0.8
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], dueAt: "next-saturday-10am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
 - "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
 - "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
   Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
@@ -475,14 +501,10 @@ Voice input: "${transcript}"`;
     })) || []
 
     const tasks = result.tasks?.map((task: any) => {
-      // Auto-set end date for repeatable tasks without an end date
-      let processedTask = {
-        ...task,
-        id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : undefined
-      }
+      // Apply smart defaults for repeatable tasks
+      let processedTask = this.applySmartDefaults(task)
       
-      // If task is repeatable but has no end date, set it to today to prevent infinite repetition
+      // Auto-set end date for repeatable tasks without an end date
       if (processedTask.isRepeatable && !processedTask.repeatEndDate) {
         const today = new Date()
         today.setHours(23, 59, 59, 999) // End of today
@@ -499,6 +521,116 @@ Voice input: "${transcript}"`;
       calendarEvents: events,
       confidence: Math.max(0, Math.min(1, result.confidence || 0.8))
     }
+  }
+
+  /**
+   * Apply smart defaults to repeatable tasks based on natural language patterns
+   */
+  private applySmartDefaults(task: any): any {
+    if (!task.isRepeatable) {
+      return {
+        ...task,
+        id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : undefined
+      }
+    }
+
+    const now = new Date()
+    let processedTask = {
+      ...task,
+      id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : undefined,
+      repeatEndDate: task.repeatEndDate || new Date(now.getFullYear() + 1, 11, 31).toISOString() // Default to end of next year
+    }
+
+    // If no due date is set, apply smart defaults based on repeat pattern
+    if (!processedTask.dueAt) {
+      switch (processedTask.repeatPattern) {
+        case 'weekly':
+          if (processedTask.repeatDays && processedTask.repeatDays.length > 0) {
+            // Find the next occurrence of the specified day(s)
+            const nextOccurrence = this.findNextOccurrence(processedTask.repeatDays)
+            processedTask.dueAt = nextOccurrence.toISOString()
+          } else {
+            // Default to next Monday at 9am
+            const nextMonday = this.getNextDayOfWeek(1) // Monday = 1
+            nextMonday.setHours(9, 0, 0, 0)
+            processedTask.dueAt = nextMonday.toISOString()
+          }
+          break
+          
+        case 'monthly':
+          // Default to same day next month at 9am
+          const nextMonth = new Date(now)
+          nextMonth.setMonth(nextMonth.getMonth() + 1)
+          nextMonth.setHours(9, 0, 0, 0)
+          processedTask.dueAt = nextMonth.toISOString()
+          break
+          
+        case 'daily':
+          // Default to tomorrow at 9am
+          const tomorrow = new Date(now)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+          tomorrow.setHours(9, 0, 0, 0)
+          processedTask.dueAt = tomorrow.toISOString()
+          break
+          
+        default:
+          // Default to next Monday at 9am
+          const defaultDate = this.getNextDayOfWeek(1)
+          defaultDate.setHours(9, 0, 0, 0)
+          processedTask.dueAt = defaultDate.toISOString()
+      }
+      
+      console.log('🔧 [VOICE] Applied smart default due date:', {
+        title: processedTask.title,
+        pattern: processedTask.repeatPattern,
+        dueAt: processedTask.dueAt
+      })
+    }
+
+    return processedTask
+  }
+
+  /**
+   * Find the next occurrence of a specific day of the week
+   */
+  private findNextOccurrence(daysOfWeek: number[]): Date {
+    const now = new Date()
+    const today = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+    
+    // Sort days to find the next one
+    const sortedDays = [...daysOfWeek].sort((a, b) => a - b)
+    
+    // Find the next day this week
+    for (const day of sortedDays) {
+      if (day > today) {
+        const nextDate = new Date(now)
+        nextDate.setDate(now.getDate() + (day - today))
+        nextDate.setHours(9, 0, 0, 0) // Default to 9am
+        return nextDate
+      }
+    }
+    
+    // If no day this week, find the first day next week
+    const firstDayNextWeek = sortedDays[0]
+    const daysUntilNextWeek = (7 - today) + firstDayNextWeek
+    const nextDate = new Date(now)
+    nextDate.setDate(now.getDate() + daysUntilNextWeek)
+    nextDate.setHours(9, 0, 0, 0) // Default to 9am
+    return nextDate
+  }
+
+  /**
+   * Get the next occurrence of a specific day of the week
+   */
+  private getNextDayOfWeek(targetDay: number): Date {
+    const now = new Date()
+    const today = now.getDay()
+    const daysUntilTarget = (targetDay - today + 7) % 7
+    const nextDate = new Date(now)
+    nextDate.setDate(now.getDate() + daysUntilTarget)
+    return nextDate
   }
 
   /**
@@ -575,11 +707,8 @@ Voice input: "${transcript}"`;
     
     console.log('🔧 [VOICE] Checking if input is vague:', lower)
     
-    // Check for vague patterns using simple string matching
+    // Check for vague patterns that should trigger clarification
     const vaguePatterns = [
-      'every week',
-      'every weekend', 
-      'weekly',
       'regularly',
       'often',
       'sometimes',
@@ -591,10 +720,27 @@ Voice input: "${transcript}"`;
       'next week'
     ]
     
-    const isVague = vaguePatterns.some(pattern => lower.includes(pattern))
-    console.log('🔧 [VOICE] Vague pattern check result:', { isVague, matchedPatterns: vaguePatterns.filter(pattern => lower.includes(pattern)) })
+    // These patterns are now handled with smart defaults, not considered vague
+    const smartDefaultPatterns = [
+      'every week',
+      'every weekend', 
+      'weekly',
+      'monthly',
+      'daily'
+    ]
     
-    return isVague
+    const isVague = vaguePatterns.some(pattern => lower.includes(pattern))
+    const hasSmartDefaults = smartDefaultPatterns.some(pattern => lower.includes(pattern))
+    
+    console.log('🔧 [VOICE] Vague pattern check result:', { 
+      isVague, 
+      hasSmartDefaults,
+      matchedVaguePatterns: vaguePatterns.filter(pattern => lower.includes(pattern)),
+      matchedSmartDefaults: smartDefaultPatterns.filter(pattern => lower.includes(pattern))
+    })
+    
+    // Only consider truly vague patterns as vague, not smart default patterns
+    return isVague && !hasSmartDefaults
   }
 
   private generateClarifyingQuestions(transcript: string, result: any): string[] {

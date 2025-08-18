@@ -13,6 +13,18 @@ TaskerADHD is designed specifically for people with ADHD, incorporating research
 
 > **Note:** The app will work without these keys, but voice features and AI assistance will be disabled.
 
+## 💾 Data Storage & Privacy
+
+**Your data stays local and private:**
+
+- **Tasks & Projects** - Stored in local SQLite database (server folder)
+- **Time Tracking** - Stored locally in your browser/desktop app
+- **Calendar Events** - Stored locally in your browser/desktop app
+- **Settings & Preferences** - Stored locally on your device
+- **Voice Recordings** - Processed in real-time, never stored permanently
+
+**No cloud sync by default** - all data remains on your device. You can export/import data as JSON files for backup or transfer between devices.
+
 ## ✨ Key Features
 
 ### 🧠 ADHD-Focused Design
@@ -46,6 +58,29 @@ TaskerADHD is designed specifically for people with ADHD, incorporating research
 ### Prerequisites
 - Node.js 18+ 
 - npm or yarn package manager
+
+### 📦 Building Distributables
+
+**Windows users can build:**
+- ✅ Windows (.exe installer)
+- ❌ Linux packages (not supported from Windows)
+- ❌ macOS packages (not supported from Windows)
+
+**macOS users can build:**
+- ✅ macOS (.app, .dmg installer)
+- ✅ Windows (.exe installer)  
+- ✅ Linux (.AppImage, .deb packages)
+
+**Linux users can build:**
+- ✅ Linux (.AppImage, .deb packages)
+- ✅ Windows (.exe installer)
+- ❌ macOS packages (not supported from Linux)
+
+> **Note:** Cross-platform builds have limitations:
+> - **macOS builds** require a macOS system due to Apple's code signing requirements
+> - **Linux builds** cannot be created from Windows systems
+> - **Windows builds** can be created from any platform
+> - If you need packages for other platforms, you'll need to build from that platform or use the source repository directly.
 
 ### Installation
 
@@ -87,6 +122,51 @@ TaskerADHD is designed specifically for people with ADHD, incorporating research
    npm run electron:dev
    ```
 
+### 🧪 Demo Tasks for Learning
+
+When you first launch the app, **demo tasks are automatically created** to help you understand how different features work:
+
+- **Repeatable Tasks**: Daily standups, weekly reviews, monthly budgets
+- **Priority Examples**: Urgent, high, medium, and low priority tasks  
+- **Energy Level Matching**: Tasks designed for different energy states
+- **Time Estimates & Labels**: Examples of task metadata
+
+These demo tasks appear in your **calendar**, **projects**, and **boards** to demonstrate the app's capabilities. You can **remove them anytime** from **Settings → Demo Tasks** when you're ready to use the app with your own tasks.
+
+### 🏗️ Building for Distribution
+
+**Build for your current platform:**
+```bash
+npm run dist
+```
+
+**Build for specific platforms:**
+```bash
+npm run dist:win    # Windows only
+npm run dist:mac    # macOS only (requires macOS)
+npm run dist:linux  # Linux only
+```
+
+**Cross-platform builds:**
+- **Windows users**: Can only build Windows packages
+- **macOS users**: Can build all platforms (Windows, macOS, Linux)
+- **Linux users**: Can build Linux + Windows packages
+
+### 🎨 Custom App Icons
+
+**Current Status**: The app uses the default Electron icon for builds. To use custom icons:
+
+**For Windows builds**: Create `assets/icon.ico` (256x256 or larger)
+**For macOS builds**: Create `assets/icon.icns` (512x512 or larger)  
+**For Linux builds**: Create `assets/icon.png` (512x512 or larger)
+
+**Icon Conversion Tools**:
+- **Online**: Convert your `client/public/icon.svg` to the required formats
+- **Command Line**: Use tools like `imagemagick` or `ffmpeg`
+- **Desktop Apps**: GIMP, Photoshop, or Sketch
+
+**Note**: The SVG icon in `client/public/icon.svg` is used for the web app and can be converted to the required desktop formats.
+
 ## 📖 Usage Guide
 
 ### Time Tracking Workflow
@@ -104,15 +184,21 @@ TaskerADHD is designed specifically for people with ADHD, incorporating research
 - Use the Voice Capture modal and say natural phrases like:
   - "Plan weekly Chick-fil-A visits every Friday at 6pm for 10 weeks"
   - "Grocery shopping every weekend at 10am"
+  - **"I want chicken tacos for every week"** → Automatically creates repeatable task for next Monday at 9am
+  - **"Every weekend"** → Automatically creates repeatable task for next Saturday at 10am
 - The Voice Calendar modal proposes tasks and calendar events:
   - Toggle "Use Staging for tasks" to route tasks via staging or directly into the board
   - Accept to save events locally (appear as purple entries in Calendar)
-- If ambiguous (e.g., "every weekend" without time), AI returns clarifying questions. Answer and retry or manually edit.
+- **Smart Defaults**: The AI automatically sets reasonable due dates and repeat patterns for common phrases
+- Only asks for clarification when truly ambiguous (e.g., "sometime this week" without specific details)
 
 ### Calendar
 - Displays both:
   - Server-backed tasks with `dueAt`
   - Local voice-created events (purple chips)
+- **Demo Tasks**: Automatically created examples showing repeatable patterns, priorities, and energy levels
+- **Quick Task Creation**: Click the `+` button on any calendar day to add tasks for that specific date
+- **Recurring Task Support**: Visual indicators for repeatable tasks with automatic instance generation
 - Updates instantly when events are accepted from the voice modal
 
 ## 🗄️ Data Export / Import
