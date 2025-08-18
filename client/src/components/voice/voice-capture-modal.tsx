@@ -205,6 +205,201 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
     }
   }
 
+  // Enhanced: Analyze transcript into detailed tasks first, with clarification only as fallback
+  const handleAnalyzeTask = async () => {
+    if (!transcript.trim()) {
+      toast.error('Please provide some input first!')
+      return
+    }
+
+    const openaiKey = localStorage.getItem('openai_api_key') || localStorage.getItem('openai_key')
+    if (!openaiKey) {
+      toast.error('OpenAI API key not found. Please configure in Settings.')
+      return
+    }
+
+    setIsShaping(true)
+    try {
+      // Quick sanity check of the API key
+      const testResponse = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${openaiKey}` }
+      })
+      if (!testResponse.ok) {
+        throw new Error(`API key test failed: ${testResponse.status}`)
+      }
+
+      // Use enhanced task generation with detailed prompting
+      const enhancedResult = await generateDetailedTasks(transcript, openaiKey)
+      console.log('🔧 [VOICE] Enhanced AI result:', enhancedResult)
+
+      if (enhancedResult.tasks && enhancedResult.tasks.length > 0) {
+        // Ensure all tasks have complete details and normalize fields
+        const enrichedTasks = enhancedResult.tasks.map((task: any) => enrichTaskWithDefaults(task, transcript))
+
+        // Normalize to our TaskProposal shape
+        const mappedTasks = enrichedTasks.map((t: any) => ({
+          id: t.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          title: String(t.title || '').trim(),
+          summary: t.summary || undefined,
+          priority: t.priority as any,
+          energy: t.energy as any,
+          dueAt: t.dueAt ? new Date(t.dueAt).toISOString() : undefined,
+          estimateMin: typeof t.estimateMin === 'number' ? t.estimateMin : undefined,
+          labels: Array.isArray(t.labels) ? t.labels.slice(0, 8) : [],
+          subtasks: Array.isArray(t.subtasks) ? t.subtasks.slice(0, 12) : [],
+          confidence: typeof t.confidence === 'number' ? Math.max(0, Math.min(1, t.confidence)) : 0.85,
+          reasoning: t.reasoning || `AI-generated task from voice input: "${transcript}"`,
+          isRepeatable: !!t.isRepeatable,
+          // Normalize repeat pattern to lower-case to match our type
+          repeatPattern: t.repeatPattern ? String(t.repeatPattern).toLowerCase() : undefined,
+          repeatInterval: t.repeatInterval || undefined,
+          repeatDays: Array.isArray(t.repeatDays) ? t.repeatDays : undefined,
+          repeatEndDate: t.repeatEndDate ? new Date(t.repeatEndDate).toISOString() : undefined,
+          repeatCount: t.repeatCount || undefined,
+          parentTaskId: t.parentTaskId || undefined,
+          nextDueDate: t.nextDueDate ? new Date(t.nextDueDate).toISOString() : undefined
+        }))
+
+        setTaskProposals({
+          tasks: mappedTasks,
+          processingTime: 0
+        })
+        setShowProposals(true)
+        toast.success(`✅ Generated ${mappedTasks.length} detailed task${mappedTasks.length > 1 ? 's' : ''}!`)
+      } else {
+        // Only fall back to clarification if absolutely no tasks could be generated
+        const questions = generateSmartQuestions(transcript)
+        setClarificationQuestions(questions)
+        setShowClarificationChat(true)
+        toast.success('🤔 Need more details to create the perfect task!')
+      }
+    } catch (error: any) {
+      console.error('Task analysis failed:', error)
+      toast.error(`Failed to analyze tasks: ${error?.message || error}`)
+    } finally {
+      setIsShaping(false)
+    }
+  }
+
+  // Call OpenAI to generate detailed tasks with strict JSON output
+  const generateDetailedTasks = async (inputTranscript: string, openaiKey: string) => {
+    const prompt = `You are an expert ADHD-friendly task assistant. Convert this voice input into detailed, actionable tasks.\n\nCRITICAL: Always generate complete, detailed tasks with ALL fields populated. Never create bare-minimum tasks.\n\nInput: "${inputTranscript}"\n\nRULES:\n1. Extract or intelligently infer ALL task details\n2. Create actionable titles with clear verbs\n3. Generate helpful descriptions and context\n4. Assign appropriate priority based on urgency cues\n5. Estimate realistic time requirements\n6. Set energy levels based on task complexity\n7. Add relevant labels/tags\n8. Create subtasks for complex items\n9. Detect recurring patterns ("every", "daily", "weekly")\n10. Set due dates when timing is mentioned\n\nPRIORITY MAPPING:\n- "urgent", "asap", "critical" → URGENT\n- "important", "soon", "this week" → HIGH  \n- "regular", "normal", "when possible" → MEDIUM\n- "someday", "eventually", "low priority" → LOW\n\nENERGY MAPPING:\n- Creative work, complex thinking, important decisions → HIGH\n- Focused work, analysis, planning → MEDIUM\n- Admin tasks, email, quick calls → LOW\n\nTIME ESTIMATION:\n- "quick", "briefly" → 5-15 minutes\n- "short" → 15-30 minutes\n- Normal tasks → 30-60 minutes\n- "long", "detailed" → 60+ minutes\n\nReturn detailed JSON with this structure:\n{\n  "tasks": [{\n    "id": "generated-uuid",\n    "title": "Clear, actionable title with verb",\n    "summary": "Detailed description with context and specifics",\n    "priority": "LOW|MEDIUM|HIGH|URGENT",\n    "energy": "LOW|MEDIUM|HIGH",\n    "estimateMin": number,\n    "dueAt": "ISO date string or null",\n    "isRepeatable": boolean,\n    "repeatPattern": "DAILY|WEEKLY|MONTHLY|null",\n    "labels": ["category", "context", "energy"],\n    "subtasks": ["specific step 1", "specific step 2"],\n    "confidence": 0.8-1.0,\n    "reasoning": "Why these details were chosen"\n  }],\n  "metadata": {\n    "totalTasks": number,\n    "averageConfidence": number,\n    "processingNotes": "Any important observations"\n  }\n}`
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: `Please convert this to detailed tasks: "${inputTranscript}"` }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API call failed: ${response.status}`)
+    }
+
+    const data = await response.json()
+    try {
+      const result = JSON.parse(data.choices?.[0]?.message?.content || '{"tasks": []}')
+      return result
+    } catch (e) {
+      console.error('Failed parsing OpenAI JSON:', e, data)
+      return { tasks: [] }
+    }
+  }
+
+  // Fill in any missing details and auto-label tasks
+  const enrichTaskWithDefaults = (task: any, originalTranscript: string) => {
+    const enriched: any = { ...task }
+
+    if (!enriched.id) {
+      enriched.id = `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    }
+
+    if (!enriched.title || String(enriched.title).trim() === '') {
+      enriched.title = originalTranscript.trim()
+    }
+
+    if (!enriched.summary) {
+      enriched.summary = `Task created from voice input: "${originalTranscript}"`
+    }
+
+    const lower = originalTranscript.toLowerCase()
+
+    if (!enriched.priority) {
+      if (/(urgent|asap|critical)/.test(lower)) enriched.priority = 'URGENT'
+      else if (/(important|soon|this week)/.test(lower)) enriched.priority = 'HIGH'
+      else if (/(later|eventually|someday)/.test(lower)) enriched.priority = 'LOW'
+      else enriched.priority = 'MEDIUM'
+    }
+
+    if (!enriched.energy) {
+      if (/(creative|think|plan|design)/.test(lower)) enriched.energy = 'HIGH'
+      else if (/(quick|email|call|admin)/.test(lower)) enriched.energy = 'LOW'
+      else enriched.energy = 'MEDIUM'
+    }
+
+    if (!enriched.estimateMin) {
+      if (/(quick|brief)/.test(lower)) enriched.estimateMin = 15
+      else if (/(long|detailed)/.test(lower)) enriched.estimateMin = 90
+      else enriched.estimateMin = 45
+    }
+
+    if (!Array.isArray(enriched.labels)) enriched.labels = []
+    if (/(work|office|project)/.test(lower)) enriched.labels.push('work')
+    if (/(personal|home|house)/.test(lower)) enriched.labels.push('personal')
+    if (/(health|exercise|gym)/.test(lower)) enriched.labels.push('health')
+    if (/(meeting|call)/.test(lower)) enriched.labels.push('communication')
+    enriched.labels.push(`${String(enriched.energy).toLowerCase()}-energy`)
+
+    if (!Array.isArray(enriched.subtasks)) {
+      enriched.subtasks = []
+      if (enriched.estimateMin > 60) {
+        const base = String(enriched.title).toLowerCase()
+        if (/(project|plan)/.test(base)) {
+          enriched.subtasks = ['Research and gather information', 'Create initial outline', 'Develop detailed plan', 'Review and finalize']
+        } else if (/(meeting|presentation)/.test(base)) {
+          enriched.subtasks = ['Prepare materials', 'Schedule participants', 'Conduct session', 'Follow up on action items']
+        }
+      }
+    }
+
+    if (!enriched.confidence) enriched.confidence = 0.85
+
+    if (enriched.isRepeatable === undefined) {
+      enriched.isRepeatable = /(every|daily|weekly|monthly)/.test(lower)
+    }
+
+    if (enriched.isRepeatable && !enriched.repeatPattern) {
+      if (/daily/.test(lower)) enriched.repeatPattern = 'DAILY'
+      else if (/(weekly|every week)/.test(lower)) enriched.repeatPattern = 'WEEKLY'
+      else if (/(monthly|every month)/.test(lower)) enriched.repeatPattern = 'MONTHLY'
+      else enriched.repeatPattern = 'WEEKLY'
+    }
+
+    return enriched
+  }
+
+  // Generate smart questions when we truly cannot produce tasks
+  const generateSmartQuestions = (input: string) => {
+    const qs: string[] = []
+    const lower = input.toLowerCase()
+    if (lower.length < 5 || !lower.includes(' ')) qs.push('Can you provide more details about what you want to accomplish?')
+    if (!/(when|time|day|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(lower)) {
+      qs.push('When would you like to complete this task?')
+    }
+    if (/(every|repeat)/.test(lower)) qs.push('How often should this task repeat?')
+    return qs.slice(0, 2)
+  }
+
   const handleShapeIntoTasks = async () => {
     if (!transcript.trim()) {
       toast.error('No transcript to process')
@@ -710,7 +905,7 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       💬 Get Task Details
                     </button>
                     <button
-                      onClick={handleShapeIntoTasks}
+                      onClick={handleAnalyzeTask}
                       disabled={isShaping}
                       className="btn-primary flex items-center space-x-2"
                     >
