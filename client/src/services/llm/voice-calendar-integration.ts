@@ -195,6 +195,16 @@ export class VoiceCalendarIntegration {
       const isVague = this.isInputVague(transcript)
       const needsClarification = result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0
       
+      console.log('🔧 [VOICE] Clarification analysis:', {
+        transcript,
+        resultConfidence: result.confidence,
+        threshold,
+        isVague,
+        hasCalendarEvents: !!result.calendarEvents && result.calendarEvents.length > 0,
+        needsClarification,
+        forceClarification: this.forceClarificationForVagueInput(transcript)
+      })
+      
       if (needsClarification) {
         console.log('VoiceCalendarIntegration: Input needs clarification - confidence:', result.confidence, 'isVague:', isVague)
         
@@ -517,19 +527,28 @@ Voice input: "${transcript}"`;
   private isInputVague(transcript: string): boolean {
     const lower = transcript.toLowerCase()
     
-    // Check for vague patterns
+    console.log('🔧 [VOICE] Checking if input is vague:', lower)
+    
+    // Check for vague patterns using simple string matching
     const vaguePatterns = [
-      /every\s+week(?!\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday))/i,
-      /every\s+weekend(?!\s+at\s+\d)/i,
-      /sometime\s+this\s+week/i,
-      /on\s+a\s+day\s+during\s+the\s+week/i,
-      /later/i,
-      /regularly/i,
-      /often/i,
-      /sometimes/i
+      'every week',
+      'every weekend', 
+      'weekly',
+      'regularly',
+      'often',
+      'sometimes',
+      'sometime',
+      'later',
+      'when i have time',
+      'on a day during the week',
+      'this week',
+      'next week'
     ]
     
-    return vaguePatterns.some(pattern => pattern.test(lower))
+    const isVague = vaguePatterns.some(pattern => lower.includes(pattern))
+    console.log('🔧 [VOICE] Vague pattern check result:', { isVague, matchedPatterns: vaguePatterns.filter(pattern => lower.includes(pattern)) })
+    
+    return isVague
   }
 
   private generateClarifyingQuestions(transcript: string, result: any): string[] {

@@ -684,6 +684,23 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       )}
                     </button>
                     <button
+                      onClick={() => {
+                        // Simple test to see if clarification chat works
+                        console.log('🧪 Testing clarification chat...')
+                        setClarificationQuestions([
+                          'What time do you want to eat pizza?',
+                          'Which day of the week?',
+                          'Which restaurant?'
+                        ])
+                        setShowClarificationChat(true)
+                        toast.success('🧪 Test: Opening clarification chat!')
+                      }}
+                      className="btn-ghost flex items-center space-x-2 text-xs"
+                      title="Test the clarification chat component"
+                    >
+                      🧪 Test Chat
+                    </button>
+                    <button
                       onClick={handleShapeIntoTasks}
                       disabled={isShaping}
                       className="btn-primary flex items-center space-x-2"
