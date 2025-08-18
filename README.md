@@ -2,6 +2,10 @@
 
 **ADHD-friendly task management with time tracking, energy awareness, and focus tools.**
 
+<a href="https://www.buymeacoffee.com/curiocrafter" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174">
+</a>
+
 TaskerADHD is designed specifically for people with ADHD, incorporating research-based strategies to help manage time blindness, hyperfocus, and executive function challenges.
 
 ## 🔑 Required API Keys

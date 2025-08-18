@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 import { enqueueShaping } from '../services/queue';
 
 const router = express.Router();
@@ -19,7 +19,7 @@ router.post('/transcripts/:id/shape', async (req, res) => {
     const userId = req.user!.id;
 
     // Verify transcript ownership
-    const transcript = await prisma.transcript.findFirst({
+    const transcript = await getPrisma().transcript.findFirst({
       where: {
         id: transcriptId,
         userId: userId
@@ -31,7 +31,7 @@ router.post('/transcripts/:id/shape', async (req, res) => {
     }
 
     // Verify board access
-    const boardMember = await prisma.boardMember.findFirst({
+    const boardMember = await getPrisma().boardMember.findFirst({
       where: {
         boardId,
         userId,
@@ -76,7 +76,7 @@ router.get('/transcripts/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const transcript = await prisma.transcript.findFirst({
+    const transcript = await getPrisma().transcript.findFirst({
       where: {
         id,
         userId
@@ -107,7 +107,7 @@ router.get('/transcripts', async (req, res) => {
     const userId = req.user!.id;
     const { limit = 50, offset = 0 } = req.query;
 
-    const transcripts = await prisma.transcript.findMany({
+    const transcripts = await getPrisma().transcript.findMany({
       where: {
         userId
       },
@@ -141,7 +141,7 @@ router.delete('/transcripts/:id', async (req, res) => {
     const userId = req.user!.id;
 
     // Verify ownership
-    const transcript = await prisma.transcript.findFirst({
+    const transcript = await getPrisma().transcript.findFirst({
       where: {
         id,
         userId
@@ -152,7 +152,7 @@ router.delete('/transcripts/:id', async (req, res) => {
       return res.status(404).json({ error: 'Transcript not found' });
     }
 
-    await prisma.transcript.delete({
+    await getPrisma().transcript.delete({
       where: { id }
     });
 

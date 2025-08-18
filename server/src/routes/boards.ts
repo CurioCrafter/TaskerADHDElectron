@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 
 const router = express.Router();
 
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
     }
     const userId = req.user!.id;
 
-    const boards = await prisma.board.findMany({
+    const boards = await getPrisma().board.findMany({
       where: {
         members: {
           some: {
@@ -123,7 +123,7 @@ router.get('/:boardId', async (req, res) => {
       console.log('[API DEBUG] GET /api/boards/:boardId', { boardId, userId })
     }
 
-    const board = await prisma.board.findFirst({
+    const board = await getPrisma().board.findFirst({
       where: {
         id: boardId,
         members: {
@@ -213,7 +213,7 @@ router.post('/', async (req, res) => {
       position: idx
     }));
 
-    const board = await prisma.board.create({
+    const board = await getPrisma().board.create({
       data: {
         name,
         description,
@@ -284,7 +284,7 @@ router.patch('/:boardId', async (req, res) => {
     const data = UpdateBoardSchema.parse(req.body);
 
     // Check if user has edit access
-    const boardMember = await prisma.boardMember.findFirst({
+    const boardMember = await getPrisma().boardMember.findFirst({
       where: {
         boardId,
         userId,
@@ -304,7 +304,7 @@ router.patch('/:boardId', async (req, res) => {
       ...(data.dueDate && { dueDate: new Date(data.dueDate) })
     };
 
-    const board = await prisma.board.update({
+    const board = await getPrisma().board.update({
       where: { id: boardId },
       data: updateData,
       include: {
@@ -351,7 +351,7 @@ router.delete('/:boardId', async (req, res) => {
     const userId = req.user!.id;
 
     // Check if user is owner
-    const board = await prisma.board.findFirst({
+    const board = await getPrisma().board.findFirst({
       where: {
         id: boardId,
         ownerId: userId
@@ -362,7 +362,7 @@ router.delete('/:boardId', async (req, res) => {
       return res.status(403).json({ error: 'Only board owners can delete boards' });
     }
 
-    await prisma.board.delete({
+    await getPrisma().board.delete({
       where: { id: boardId }
     });
 
@@ -381,7 +381,7 @@ router.post('/:boardId/columns', async (req, res) => {
     const userId = req.user!.id;
 
     // Check if user has edit access
-    const boardMember = await prisma.boardMember.findFirst({
+    const boardMember = await getPrisma().boardMember.findFirst({
       where: {
         boardId,
         userId,
@@ -398,14 +398,14 @@ router.post('/:boardId/columns', async (req, res) => {
     // Get next position if not provided
     let finalPosition = position;
     if (finalPosition === undefined) {
-      const lastColumn = await prisma.column.findFirst({
+      const lastColumn = await getPrisma().column.findFirst({
         where: { boardId },
         orderBy: { position: 'desc' }
       });
       finalPosition = (lastColumn?.position ?? -1) + 1;
     }
 
-    const column = await prisma.column.create({
+    const column = await getPrisma().column.create({
       data: {
         name,
         boardId,

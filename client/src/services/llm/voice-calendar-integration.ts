@@ -194,6 +194,7 @@ export class VoiceCalendarIntegration {
       console.log('VoiceCalendarIntegration: OpenAI response received:', data)
       
       const raw = data.choices?.[0]?.message?.content
+      console.log('🔧 [VOICE] Raw AI response:', raw)
       if (!raw) {
         throw new Error('No content in OpenAI response')
       }
@@ -201,6 +202,7 @@ export class VoiceCalendarIntegration {
       let result
       try {
         result = JSON.parse(raw)
+        console.log('🔧 [VOICE] Parsed AI result:', JSON.stringify(result, null, 2))
       } catch (e) {
         console.error('VoiceCalendarIntegration: JSON parse error:', e, 'Raw content:', raw)
         // Ask follow-up clarification when ambiguous
@@ -289,6 +291,8 @@ export class VoiceCalendarIntegration {
           return this.processCalendarResult(result)
         }
         
+        console.log('🔧 [VOICE] Forcing clarification with questions:', questions)
+        
         return {
           intent: 'needs_clarification',
           tasks: [{
@@ -349,6 +353,8 @@ SMART DEFAULTS - DON'T ASK CLARIFICATION FOR:
 - "weekly" → Set to next Monday at 9am, weekly repeat
 - "monthly" → Set to next month same day, monthly repeat
 - "daily" → Set to tomorrow at 9am, daily repeat
+- "every day" → Set to tomorrow at 9am, daily repeat
+- "everyday" → Set to tomorrow at 9am, daily repeat
 
 DO NOT ASK CLARIFICATION FOR:
 - Specific meetings: "meeting next monday at 11am" (has time, day, and action)
@@ -357,7 +363,7 @@ DO NOT ASK CLARIFICATION FOR:
 - Specific events: "team lunch next wednesday at noon" (has day, time, and action)
 
 Key patterns to detect:
-- Time references: "every weekend", "daily", "weekly", "monthly", "every Monday"
+- Time references: "every weekend", "daily", "weekly", "monthly", "every Monday", "every day", "everyday"
 - Specific times: "morning", "afternoon", "evening", "at 3pm", "at 6pm"  
 - Duration estimates: "30 minutes", "1 hour", "quick task"
 - Priority indicators: "urgent", "important", "when I have time"
@@ -368,8 +374,20 @@ For recurring patterns:
 - "every weekday" = weekly recurrence Monday-Friday  
 - "every Monday" = weekly recurrence on Mondays
 - "daily" = daily recurrence
+- "every day" = daily recurrence (same as daily)
+- "everyday" = daily recurrence (same as daily)
 - "weekly" = weekly recurrence (same day of week)
 - "monthly" = monthly recurrence
+
+CRITICAL: When you see "every day", "everyday", or "daily", ALWAYS set:
+- isRepeatable: true
+- repeatPattern: "daily"
+- repeatInterval: 1
+- dueAt: tomorrow at 9am (if no specific time given)
+- repeatCount: 365
+- repeatEndDate: end of next year
+
+MANDATORY: For "every day" patterns, you MUST set a specific due date (tomorrow at 9am) and make it repeatable. Do not leave dueAt as null or undefined.
 
 IMPORTANT: For repeatable tasks without a specific end date, automatically set repeatEndDate to today's date to prevent infinite repetition.
 
@@ -393,6 +411,8 @@ Response format:
       "repeatEndDate": "ISO_date_string_or_null"
     }
   ],
+
+IMPORTANT: For "every day" patterns, dueAt MUST be a valid ISO date string (e.g., "2024-12-26T09:00:00.000Z"), not null or undefined.
   "calendarEvents": [
     {
       "id": "unique_id", 
@@ -424,6 +444,8 @@ Examples:
   Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], dueAt: "next-monday-9am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
 - "I want to go eat pizza every weekend" → SMART DEFAULT: Set to next Saturday at 10am, weekly repeat on weekends, confidence 0.8
   Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], dueAt: "next-saturday-10am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
+- "I want chicken every day" → SMART DEFAULT: Set to tomorrow at 9am, daily repeat, confidence 0.8
+  Task: isRepeatable: true, repeatPattern: "daily", repeatInterval: 1, dueAt: "2024-12-26T09:00:00.000Z" (tomorrow 9am), repeatCount: 365, repeatEndDate: "2024-12-31T23:59:59.000Z"
 - "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
 - "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
   Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
@@ -515,12 +537,16 @@ Voice input: "${transcript}"`;
       return processedTask
     }) || []
 
-    return {
+    const finalResult = {
       intent: result.intent || 'task_and_calendar',
       tasks,
       calendarEvents: events,
       confidence: Math.max(0, Math.min(1, result.confidence || 0.8))
     }
+    
+    console.log('🔧 [VOICE] Final processed result:', JSON.stringify(finalResult, null, 2))
+    
+    return finalResult
   }
 
   /**
@@ -585,7 +611,10 @@ Voice input: "${transcript}"`;
       console.log('🔧 [VOICE] Applied smart default due date:', {
         title: processedTask.title,
         pattern: processedTask.repeatPattern,
-        dueAt: processedTask.dueAt
+        dueAt: processedTask.dueAt,
+        isRepeatable: processedTask.isRepeatable,
+        repeatInterval: processedTask.repeatInterval,
+        repeatEndDate: processedTask.repeatEndDate
       })
     }
 
@@ -726,7 +755,9 @@ Voice input: "${transcript}"`;
       'every weekend', 
       'weekly',
       'monthly',
-      'daily'
+      'daily',
+      'every day',
+      'everyday'
     ]
     
     const isVague = vaguePatterns.some(pattern => lower.includes(pattern))
@@ -776,7 +807,12 @@ Voice input: "${transcript}"`;
     
     if (!hasDay) {
       if (hasRecurrence) {
-        questions.push('Which day(s) of the week?')
+        // Don't ask for day if it's a daily pattern
+        if (lower.includes('every day') || lower.includes('everyday') || lower.includes('daily')) {
+          // Daily patterns don't need specific days
+        } else {
+          questions.push('Which day(s) of the week?')
+        }
       } else {
         questions.push('Which day?')
       }
@@ -823,8 +859,15 @@ Voice input: "${transcript}"`;
     // For recurring tasks, we need more specific details
     const hasRecurrence = /(?:every|weekly|daily|monthly|repeat|recurring)/i.test(transcript)
     if (hasRecurrence) {
-      // Recurring tasks need more specific details
-      if (hasTime && hasDay) {
+      // For daily patterns, we only need time (day is implied)
+      if (lower.includes('every day') || lower.includes('everyday') || lower.includes('daily')) {
+        if (hasTime) {
+          console.log('🔧 [VOICE] Daily recurring task has sufficient details (time):', { hasTime, hasRecurrence })
+          return true
+        }
+      }
+      // For other recurring patterns, we need time and day
+      else if (hasTime && hasDay) {
         console.log('🔧 [VOICE] Recurring task has sufficient details (time, day):', { hasTime, hasDay, hasRecurrence })
         return true
       }

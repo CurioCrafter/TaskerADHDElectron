@@ -513,14 +513,21 @@ export const useBoardStore = create<BoardState>()(
                     'Project Deadline'
                   ]
                   
-                  for (const task of column.tasks) {
-                    if (demoTaskTitles.includes(task.title)) {
-                      try {
-                        await get().deleteTask(task.id)
-                        deletedCount++
-                      } catch (error) {
-                        console.log('Failed to delete demo task:', task.title, error)
-                      }
+                  // Create a list of tasks to delete first, then delete them
+                  const tasksToDelete = column.tasks.filter(task => 
+                    demoTaskTitles.includes(task.title)
+                  )
+                  
+                  // Delete all demo tasks in this column
+                  for (const task of tasksToDelete) {
+                    try {
+                      console.log(`🗑️ [BOARD] Deleting demo task: ${task.title}`)
+                      await get().deleteTask(task.id)
+                      deletedCount++
+                      // Small delay to ensure deletion completes
+                      await new Promise(resolve => setTimeout(resolve, 100))
+                    } catch (error) {
+                      console.error('Failed to delete demo task:', task.title, error)
                     }
                   }
                 }
@@ -528,16 +535,16 @@ export const useBoardStore = create<BoardState>()(
             }
           }
 
-          // Refresh boards to reflect changes
-          await get().fetchBoards()
-          
-          set({ isLoading: false })
+          // Don't fetch boards again - just update the local state
+          // This prevents demo tasks from being recreated
           console.log(`🗑️ [BOARD] Purged ${deletedCount} demo tasks`)
           
           // Dispatch event to notify calendar that tasks have been updated
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new Event('taskUpdated'))
           }
+          
+          set({ isLoading: false })
         } catch (error) {
           console.error('Failed to purge demo tasks:', error)
           set({ error: 'Failed to purge demo tasks', isLoading: false })

@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 import { generateToken, generateMagicLinkToken } from '../utils/jwt';
 import { sendMagicLinkEmail } from '../utils/email';
 
@@ -27,7 +27,7 @@ router.post('/magic-link/start', async (req, res) => {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
     // Store magic link token
-    await prisma.magicLink.create({
+    await getPrisma().magicLink.create({
       data: {
         email,
         token,
@@ -74,7 +74,7 @@ router.post('/magic-link/verify', async (req, res) => {
     const { token } = MagicLinkVerifySchema.parse(req.body);
 
     // Find and validate magic link
-    const magicLink = await prisma.magicLink.findUnique({
+    const magicLink = await getPrisma().magicLink.findUnique({
       where: { token }
     });
 
@@ -91,18 +91,18 @@ router.post('/magic-link/verify', async (req, res) => {
     }
 
     // Mark magic link as used
-    await prisma.magicLink.update({
+    await getPrisma().magicLink.update({
       where: { token },
       data: { used: true }
     });
 
     // Find or create user
-    let user = await prisma.user.findUnique({
+    let user = await getPrisma().user.findUnique({
       where: { email: magicLink.email }
     });
 
     if (!user) {
-      user = await prisma.user.create({
+      user = await getPrisma().user.create({
         data: {
           email: magicLink.email,
           displayName: magicLink.email.split('@')[0] // Default display name
@@ -110,7 +110,7 @@ router.post('/magic-link/verify', async (req, res) => {
       });
 
       // Create default board for new user
-      await prisma.board.create({
+      await getPrisma().board.create({
         data: {
           name: 'My Tasks',
           ownerId: user.id,
@@ -184,7 +184,7 @@ router.get('/me', async (req, res) => {
     const { verifyToken } = await import('../utils/jwt');
     const decoded = verifyToken(token);
 
-    const user = await prisma.user.findUnique({
+    const user = await getPrisma().user.findUnique({
       where: { id: decoded.userId },
       select: {
         id: true,

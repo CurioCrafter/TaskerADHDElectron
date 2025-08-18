@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 
 const router = express.Router();
 const DEBUG_API = process.env.NODE_ENV === 'development' || process.env.DEBUG_API === 'true'
@@ -82,7 +82,7 @@ const UpdateSubtaskSchema = z.object({
 
 // Helper function to check board access
 async function checkBoardAccess(userId: string, boardId: string, requiredRole: string[] = ['OWNER', 'EDITOR', 'VIEWER']) {
-  const boardMember = await prisma.boardMember.findFirst({
+  const boardMember = await getPrisma().boardMember.findFirst({
     where: {
       boardId,
       userId,
@@ -162,7 +162,7 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await getPrisma().task.findMany({
       where: filters,
       include: {
         labels: {
@@ -205,7 +205,7 @@ router.post('/', async (req, res) => {
     apiDebugLog('POST /api/tasks user', { userId })
 
     // Get column to verify board access
-    const column = await prisma.column.findUnique({
+    const column = await getPrisma().column.findUnique({
       where: { id: data.columnId },
       include: { board: true }
     });
@@ -221,14 +221,14 @@ router.post('/', async (req, res) => {
     }
 
     // Get next position in column
-    const lastTask = await prisma.task.findFirst({
+    const lastTask = await getPrisma().task.findFirst({
       where: { columnId: data.columnId },
       orderBy: { position: 'desc' }
     });
     const position = (lastTask?.position ?? -1) + 1;
 
     // Create task
-    const task = await prisma.task.create({
+    const task = await getPrisma().task.create({
       data: {
         title: data.title,
         summary: data.summary,
@@ -274,18 +274,18 @@ router.post('/', async (req, res) => {
     if (data.labels && data.labels.length > 0) {
       for (const labelName of data.labels) {
         // Find or create label
-        let label = await prisma.label.findUnique({
+        let label = await getPrisma().label.findUnique({
           where: { name: labelName }
         });
         
         if (!label) {
-          label = await prisma.label.create({
+          label = await getPrisma().label.create({
             data: { name: labelName }
           });
         }
 
         // Link task to label
-        await prisma.taskLabel.create({
+        await getPrisma().taskLabel.create({
           data: {
             taskId: task.id,
             labelId: label.id
@@ -296,7 +296,7 @@ router.post('/', async (req, res) => {
       }
 
       // Fetch updated task with labels
-      const updatedTask = await prisma.task.findUnique({
+      const updatedTask = await getPrisma().task.findUnique({
         where: { id: task.id },
         include: {
           labels: {
@@ -339,7 +339,7 @@ router.patch('/:taskId', async (req, res) => {
     const userId = req.user!.id;
 
     // Get task to verify access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -358,7 +358,7 @@ router.patch('/:taskId', async (req, res) => {
     const { labels, repeatDays, ...updateData } = data;
     
     // Update task
-    const updatedTask = await prisma.task.update({
+    const updatedTask = await getPrisma().task.update({
       where: { id: taskId },
       data: {
         ...updateData,
@@ -384,23 +384,23 @@ router.patch('/:taskId', async (req, res) => {
     // Handle labels update
     if (data.labels !== undefined) {
       // Remove existing labels
-      await prisma.taskLabel.deleteMany({
+      await getPrisma().taskLabel.deleteMany({
         where: { taskId }
       });
 
       // Add new labels
       for (const labelName of data.labels) {
-        let label = await prisma.label.findUnique({
+        let label = await getPrisma().label.findUnique({
           where: { name: labelName }
         });
         
         if (!label) {
-          label = await prisma.label.create({
+          label = await getPrisma().label.create({
             data: { name: labelName }
           });
         }
 
-        await prisma.taskLabel.create({
+        await getPrisma().taskLabel.create({
           data: {
             taskId,
             labelId: label.id
@@ -411,7 +411,7 @@ router.patch('/:taskId', async (req, res) => {
       }
 
       // Fetch updated task with new labels
-      const finalTask = await prisma.task.findUnique({
+      const finalTask = await getPrisma().task.findUnique({
         where: { id: taskId },
         include: {
           labels: {
@@ -454,7 +454,7 @@ router.post('/:taskId/move', async (req, res) => {
     const userId = req.user!.id;
 
     // Get task and verify access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -470,7 +470,7 @@ router.post('/:taskId/move', async (req, res) => {
     }
 
     // Verify target column exists and is in same board
-    const targetColumn = await prisma.column.findUnique({
+    const targetColumn = await getPrisma().column.findUnique({
       where: { id: columnId }
     });
 
@@ -479,7 +479,7 @@ router.post('/:taskId/move', async (req, res) => {
     }
 
     // Update task position and column
-    const updatedTask = await prisma.task.update({
+    const updatedTask = await getPrisma().task.update({
       where: { id: taskId },
       data: {
         columnId,
@@ -521,7 +521,7 @@ router.delete('/:taskId', async (req, res) => {
     const userId = req.user!.id;
 
     // Get task to verify access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -536,7 +536,7 @@ router.delete('/:taskId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    await prisma.task.delete({
+    await getPrisma().task.delete({
       where: { id: taskId }
     });
 
@@ -557,7 +557,7 @@ router.post('/:taskId/subtasks', async (req, res) => {
     const userId = req.user!.id;
 
     // Verify task access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -574,14 +574,14 @@ router.post('/:taskId/subtasks', async (req, res) => {
     // Get next position if not provided
     let finalPosition = position;
     if (finalPosition === undefined) {
-      const lastSubtask = await prisma.subtask.findFirst({
+      const lastSubtask = await getPrisma().subtask.findFirst({
         where: { taskId },
         orderBy: { position: 'desc' }
       });
       finalPosition = (lastSubtask?.position ?? -1) + 1;
     }
 
-    const subtask = await prisma.subtask.create({
+    const subtask = await getPrisma().subtask.create({
       data: {
         title,
         taskId,
@@ -612,7 +612,7 @@ router.patch('/:taskId/subtasks/:subtaskId', async (req, res) => {
     const userId = req.user!.id;
 
     // Verify access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -626,7 +626,7 @@ router.patch('/:taskId/subtasks/:subtaskId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const subtask = await prisma.subtask.update({
+    const subtask = await getPrisma().subtask.update({
       where: { 
         id: subtaskId,
         taskId // Ensure subtask belongs to this task
@@ -656,7 +656,7 @@ router.delete('/:taskId/subtasks/:subtaskId', async (req, res) => {
     const userId = req.user!.id;
 
     // Verify access
-    const task = await prisma.task.findUnique({
+    const task = await getPrisma().task.findUnique({
       where: { id: taskId },
       include: { column: { include: { board: true } } }
     });
@@ -670,7 +670,7 @@ router.delete('/:taskId/subtasks/:subtaskId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    await prisma.subtask.delete({
+    await getPrisma().subtask.delete({
       where: { 
         id: subtaskId,
         taskId // Ensure subtask belongs to this task

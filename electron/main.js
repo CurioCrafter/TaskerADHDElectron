@@ -571,12 +571,25 @@ async function startServers() {
         stdio: 'pipe'
       })
       
-      await new Promise((resolve) => {
-        prismaGenerate.on('close', () => {
-          debugLog('Prisma client generated')
-          resolve()
+      await new Promise((resolve, reject) => {
+        prismaGenerate.on('close', (code) => {
+          if (code === 0) {
+            debugLog('Prisma client generated successfully')
+            resolve()
+          } else {
+            debugLog(`Prisma generate failed with code: ${code}`)
+            reject(new Error(`Prisma generate failed with code: ${code}`))
+          }
+        })
+        prismaGenerate.on('error', (err) => {
+          debugLog('Prisma generate error:', err)
+          reject(err)
         })
       })
+      
+      // Wait a bit for Prisma client to be fully ready
+      debugLog('Waiting for Prisma client to be ready...')
+      await new Promise(resolve => setTimeout(resolve, 2000))
       
       debugLog('Setting up database...')
       const prismaPush = spawn(serverCmd, ['run', 'prisma:push'], {
@@ -589,10 +602,19 @@ async function startServers() {
         }
       })
       
-      await new Promise((resolve) => {
-        prismaPush.on('close', () => {
-          debugLog('Database setup complete')
-          resolve()
+      await new Promise((resolve, reject) => {
+        prismaPush.on('close', (code) => {
+          if (code === 0) {
+            debugLog('Database setup complete')
+            resolve()
+          } else {
+            debugLog(`Database setup failed with code: ${code}`)
+            reject(new Error(`Database setup failed with code: ${code}`))
+          }
+        })
+        prismaPush.on('error', (err) => {
+          debugLog('Database setup error:', err)
+          reject(err)
         })
       })
       
@@ -605,12 +627,22 @@ async function startServers() {
           ...process.env, 
           NODE_ENV: 'development',
           DATABASE_URL: 'file:./dev.db',
-          DISABLE_REDIS: process.env.REDIS_URL ? '0' : '1',
+          DISABLE_REDIS: '1', // Disable Redis in packaged app
           JWT_SECRET: 'your-jwt-secret-key-change-in-production',
           JWT_EXPIRES_IN: '7d',
           MAGIC_LINK_SECRET: 'your-magic-link-secret-change-in-production',
-          FRONTEND_URL: 'http://localhost:3000'
+          FRONTEND_URL: 'http://localhost:3000',
+          PORT: '3001'
         }
+      })
+      
+      // Add error handling for server process
+      serverProcess.on('error', (err) => {
+        debugLog('Server process error:', err)
+      })
+      
+      serverProcess.on('exit', (code, signal) => {
+        debugLog(`Server process exited with code: ${code}, signal: ${signal}`)
       })
     } else {
       debugLog('Running server via npm run dev...')

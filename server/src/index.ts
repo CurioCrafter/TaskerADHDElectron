@@ -34,12 +34,48 @@ const io = new SocketIOServer(server, {
 // Expose io globally for workers
 ;(global as any).socketIO = io;
 
-// Initialize Prisma
-export const prisma = new PrismaClient({
-  log: process.env.PRISMA_DEBUG === 'true'
-    ? ['query', 'info', 'warn', 'error']
-    : ['info', 'warn', 'error']
-});
+// Initialize Prisma with retry mechanism
+let prisma: PrismaClient
+
+async function initializePrisma() {
+  const maxRetries = 5
+  const retryDelay = 2000
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[PRISMA] Attempt ${attempt}/${maxRetries}: Initializing Prisma client...`)
+      
+      prisma = new PrismaClient({
+        log: process.env.PRISMA_DEBUG === 'true'
+          ? ['query', 'info', 'warn', 'error']
+          : ['info', 'warn', 'error']
+      })
+      
+      // Test the connection
+      await prisma.$connect()
+      console.log('[PRISMA] ✅ Prisma client initialized successfully')
+      return prisma
+      
+    } catch (error) {
+      console.error(`[PRISMA] ❌ Attempt ${attempt} failed:`, error)
+      
+      if (attempt === maxRetries) {
+        console.error('[PRISMA] 💥 All retry attempts failed. Exiting...')
+        process.exit(1)
+      }
+      
+      console.log(`[PRISMA] ⏳ Waiting ${retryDelay}ms before retry...`)
+      await new Promise(resolve => setTimeout(resolve, retryDelay))
+    }
+  }
+}
+
+// Initialize Prisma before starting the server
+const prismaPromise = initializePrisma()
+
+// Export prisma for use in other modules
+export { prismaPromise }
+export const getPrisma = () => prisma
 
 // Middleware
 app.use(cors({
@@ -114,7 +150,7 @@ io.use(async (socket, next) => {
 		const { verifyToken } = await import('./utils/jwt');
 		const decoded = verifyToken(token);
 		
-		const user = await prisma.user.findUnique({
+		const user = await getPrisma().user.findUnique({
 			where: { id: decoded.userId }
 		});
 		
@@ -149,10 +185,16 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
-	console.log(`🚀 TaskerADHD server running on port ${PORT}`);
-	console.log(`📊 Health check: http://localhost:${PORT}/health`);
-	console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
+// Wait for Prisma to be ready before starting the server
+prismaPromise.then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 TaskerADHD server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}).catch((error) => {
+  console.error('❌ Failed to initialize Prisma:', error);
+  process.exit(1);
 });
 
 // Graceful shutdown function
@@ -182,8 +224,12 @@ async function gracefulShutdown(signal: string) {
 	try {
 		// Disconnect from database
 		console.log('Disconnecting from database...');
-		await prisma.$disconnect();
-		console.log('✅ Database disconnected');
+		if (prisma) {
+			await prisma.$disconnect();
+			console.log('✅ Database disconnected');
+		} else {
+			console.log('Prisma client not initialized, skipping disconnect');
+		}
 	} catch (error) {
 		console.error('Error disconnecting from database:', error);
 	}

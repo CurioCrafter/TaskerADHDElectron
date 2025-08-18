@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 
 const router = express.Router();
 
@@ -25,7 +25,7 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const proposal = await prisma.proposal.findFirst({
+    const proposal = await getPrisma().proposal.findFirst({
       where: {
         id,
         transcript: {
@@ -63,7 +63,7 @@ router.post('/:id/accept', async (req, res) => {
     const { tasks } = AcceptProposalSchema.parse(req.body);
 
     // Get proposal and verify ownership
-    const proposal = await prisma.proposal.findFirst({
+    const proposal = await getPrisma().proposal.findFirst({
       where: {
         id,
         transcript: {
@@ -92,7 +92,7 @@ router.post('/:id/accept', async (req, res) => {
     }
 
     // Verify board access
-    const boardMember = await prisma.boardMember.findFirst({
+    const boardMember = await getPrisma().boardMember.findFirst({
       where: {
         boardId,
         userId,
@@ -107,7 +107,7 @@ router.post('/:id/accept', async (req, res) => {
     }
 
     // Get board with columns
-    const board = await prisma.board.findUnique({
+    const board = await getPrisma().board.findUnique({
       where: { id: boardId },
       include: {
         columns: {
@@ -126,7 +126,7 @@ router.post('/:id/accept', async (req, res) => {
     console.log('📋 Available columns:', board.columns.map(c => ({ id: c.id, name: c.name })));
     
     // Create tasks in a transaction
-    const createdTasks = await prisma.$transaction(async (tx) => {
+    const createdTasks = await getPrisma().$transaction(async (tx) => {
       const taskResults = [];
 
       for (const [index, taskData] of tasks.entries()) {
@@ -264,7 +264,7 @@ router.post('/:id/accept', async (req, res) => {
     // Fetch updated tasks with labels and column information
     const tasksWithLabels = await Promise.all(
       createdTasks.map(task => 
-        prisma.task.findUnique({
+        getPrisma().task.findUnique({
           where: { id: task.id },
           include: {
             labels: {
@@ -363,7 +363,7 @@ router.post('/:id/reject', async (req, res) => {
     const userId = req.user!.id;
 
     // Get proposal and verify ownership
-    const proposal = await prisma.proposal.findFirst({
+    const proposal = await getPrisma().proposal.findFirst({
       where: {
         id,
         transcript: {
@@ -381,7 +381,7 @@ router.post('/:id/reject', async (req, res) => {
     }
 
     // Mark proposal as rejected
-    const updatedProposal = await prisma.proposal.update({
+    const updatedProposal = await getPrisma().proposal.update({
       where: { id },
       data: { status: 'REJECTED' }
     });
@@ -416,7 +416,7 @@ router.get('/', async (req, res) => {
       filters.status = status;
     }
 
-    const proposals = await prisma.proposal.findMany({
+    const proposals = await getPrisma().proposal.findMany({
       where: filters,
       include: {
         transcript: {

@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 import { 
   tasksToCalendarEvents, 
   generateICalendar, 
@@ -60,7 +60,7 @@ router.get('/events', async (req, res) => {
     }
 
     // Fetch tasks
-    const tasks = await prisma.task.findMany({
+    const tasks = await getPrisma().task.findMany({
       where,
       include: {
         column: {
@@ -118,7 +118,7 @@ router.get('/export/:boardId', async (req, res) => {
     console.log('📅 Calendar export request:', { userId, boardId, timezone });
 
     // Check board access
-    const board = await prisma.board.findFirst({
+    const board = await getPrisma().board.findFirst({
       where: {
         id: boardId,
         members: {
@@ -180,7 +180,7 @@ router.post('/schedule', async (req, res) => {
     const validatedPreferences = SchedulingPreferencesSchema.parse(preferences);
 
     // Get unscheduled tasks
-    const tasks = await prisma.task.findMany({
+    const tasks = await getPrisma().task.findMany({
       where: {
         boardId,
         board: {
@@ -270,7 +270,7 @@ router.get('/availability/:boardId', async (req, res) => {
     console.log('📅 Availability check:', { userId, boardId, date: targetDate.toISOString().split('T')[0] });
 
     // Get tasks scheduled for this day
-    const scheduledTasks = await prisma.task.findMany({
+    const scheduledTasks = await getPrisma().task.findMany({
       where: {
         boardId,
         board: {

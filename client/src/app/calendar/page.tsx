@@ -217,9 +217,15 @@ export default function CalendarPage() {
 
 
 
-  // Add demo tasks to board store if no real tasks exist
+  // Add demo tasks to board store if no real tasks exist (only once)
   useEffect(() => {
     const addDemoTasksIfNeeded = async () => {
+      // Check if we've already added demo tasks this session
+      const demoTasksAdded = sessionStorage.getItem('demoTasksAdded')
+      if (demoTasksAdded === 'true') {
+        return
+      }
+      
       const realTasks = getAllTasksWithDates()
       if (realTasks.length === 0 && boards && boards.length > 0) {
         // Set the first board as current board for demo task creation
@@ -229,6 +235,7 @@ export default function CalendarPage() {
         // Temporarily set the default board as current
         setCurrentBoard(defaultBoard)
         
+        let createdCount = 0
         for (const exampleTask of EXAMPLE_TASKS) {
           try {
             await createTask({
@@ -244,9 +251,16 @@ export default function CalendarPage() {
               repeatDays: exampleTask.repeatDays,
               columnId: defaultBoard.columns?.[0]?.id || 'default'
             })
+            createdCount++
           } catch (error) {
             console.log('Demo task already exists or failed to create:', exampleTask.title)
           }
+        }
+        
+        // Mark that we've added demo tasks this session
+        if (createdCount > 0) {
+          sessionStorage.setItem('demoTasksAdded', 'true')
+          console.log(`🔧 [CALENDAR] Added ${createdCount} demo tasks`)
         }
       }
     }

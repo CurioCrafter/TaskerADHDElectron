@@ -1,6 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 import { shapeTranscriptWithAI } from './llm';
 
 // Feature flag to disable Redis-backed queues (used when Redis is not available)
@@ -65,7 +65,7 @@ const shapingWorker: Worker<ShapingJobData> | null = !disableRedis && redis
       await job.updateProgress(10);
 
       // Fetch transcript
-      const transcript = await prisma.transcript.findFirst({
+      const transcript = await getPrisma().transcript.findFirst({
         where: {
           id: transcriptId,
           userId
@@ -83,7 +83,7 @@ const shapingWorker: Worker<ShapingJobData> | null = !disableRedis && redis
       await job.updateProgress(20);
 
       // Fetch board context
-      const board = await prisma.board.findFirst({
+      const board = await getPrisma().board.findFirst({
         where: {
           id: boardId,
           members: {
@@ -104,7 +104,7 @@ const shapingWorker: Worker<ShapingJobData> | null = !disableRedis && redis
       await job.updateProgress(30);
 
       // Fetch recent tasks for context
-      const recentTasks = await prisma.task.findMany({
+      const recentTasks = await getPrisma().task.findMany({
         where: {
           boardId,
           createdAt: {
@@ -143,7 +143,7 @@ const shapingWorker: Worker<ShapingJobData> | null = !disableRedis && redis
       await job.updateProgress(80);
 
       // Store proposal
-      const proposal = await prisma.proposal.create({
+      const proposal = await getPrisma().proposal.create({
         data: {
           transcriptId,
           json: {
@@ -179,7 +179,7 @@ const shapingWorker: Worker<ShapingJobData> | null = !disableRedis && redis
       console.error(`❌ Shaping failed for transcript ${transcriptId}:`, error);
       
       // Create failed proposal for tracking
-      await prisma.proposal.create({
+      await getPrisma().proposal.create({
         data: {
           transcriptId,
           json: {

@@ -1,5 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 import { createSTTStream } from '../services/stt';
 import { enqueueShaping } from '../services/queue';
 
@@ -34,7 +34,7 @@ export function setupVoiceSocket(io: SocketIOServer) {
         console.log(`🎙️ Voice session started for user ${userId}, board ${boardId}`);
 
         // Verify board access
-        const boardMember = await prisma.boardMember.findFirst({
+        const boardMember = await getPrisma().boardMember.findFirst({
           where: {
             boardId,
             userId,
@@ -50,7 +50,7 @@ export function setupVoiceSocket(io: SocketIOServer) {
         }
 
         // Create transcript record
-        const transcript = await prisma.transcript.create({
+        const transcript = await getPrisma().transcript.create({
           data: {
             userId,
             text: '',
@@ -78,7 +78,7 @@ export function setupVoiceSocket(io: SocketIOServer) {
             sessionData.accumulatedText += (sessionData.accumulatedText ? ' ' : '') + text;
 
             // Update transcript in database
-            await prisma.transcript.update({
+            await getPrisma().transcript.update({
               where: { id: transcript.id },
               data: { 
                 text: sessionData.accumulatedText,
@@ -172,7 +172,7 @@ export function setupVoiceSocket(io: SocketIOServer) {
         const userId = socket.data.userId;
 
         // Verify transcript ownership
-        const transcript = await prisma.transcript.findFirst({
+        const transcript = await getPrisma().transcript.findFirst({
           where: {
             id: transcriptId,
             userId
@@ -185,7 +185,7 @@ export function setupVoiceSocket(io: SocketIOServer) {
         }
 
         // Verify board access
-        const boardMember = await prisma.boardMember.findFirst({
+        const boardMember = await getPrisma().boardMember.findFirst({
           where: {
             boardId,
             userId,

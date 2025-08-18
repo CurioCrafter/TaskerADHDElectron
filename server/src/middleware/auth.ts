@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
-import { prisma } from '../index';
+import { getPrisma } from '../index';
 
 // Extend Express Request type to include user
 declare global {
@@ -30,16 +30,16 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 			const devEmail = 'dev@taskeradhd.local';
 			const devDisplayName = 'Dev User';
 
-			const devUser = await prisma.user.upsert({
+			const devUser = await getPrisma().user.upsert({
 				where: { email: devEmail },
 				update: { displayName: devDisplayName },
 				create: { email: devEmail, displayName: devDisplayName }
 			});
 
 			// Ensure a default board exists with columns and membership
-			const boardCount = await prisma.board.count({ where: { ownerId: devUser.id } });
+			const boardCount = await getPrisma().board.count({ where: { ownerId: devUser.id } });
 			if (boardCount === 0) {
-				await prisma.board.create({
+				await getPrisma().board.create({
 					data: {
 						name: 'My Tasks',
 						ownerId: devUser.id,
@@ -72,7 +72,7 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 		const decoded = verifyToken(token);
 		
 		// Fetch user from database to ensure they still exist
-		const user = await prisma.user.findUnique({
+		const user = await getPrisma().user.findUnique({
 			where: { id: decoded.userId },
 			select: {
 				id: true,
@@ -107,11 +107,11 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 				// Ensure dev user exists in DB
 				const devEmail = 'dev@taskeradhd.local';
 				const devDisplayName = 'Dev User';
-				const devUser = await prisma.user.upsert({
-					where: { email: devEmail },
-					update: { displayName: devDisplayName },
-					create: { email: devEmail, displayName: devDisplayName }
-				});
+							const devUser = await getPrisma().user.upsert({
+				where: { email: devEmail },
+				update: { displayName: devDisplayName },
+				create: { email: devEmail, displayName: devDisplayName }
+			});
 
 				req.user = {
 					id: devUser.id,
@@ -122,7 +122,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 			}
 
 			const decoded = verifyToken(token);
-			const user = await prisma.user.findUnique({
+			const user = await getPrisma().user.findUnique({
 				where: { id: decoded.userId },
 				select: {
 					id: true,
