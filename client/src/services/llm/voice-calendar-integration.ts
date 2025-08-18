@@ -65,7 +65,30 @@ export class VoiceCalendarIntegration {
     this.apiKey = apiKey
   }
 
-  async processVoiceInput(transcript: string, clarifyThreshold?: number): Promise<VoiceCalendarResult> {
+  private forceClarificationForVagueInput(transcript: string): boolean {
+    const lowerTranscript = transcript.toLowerCase()
+    
+    // Common vague patterns that should always trigger clarification
+    const vaguePatterns = [
+      'every week',
+      'every weekend', 
+      'weekly',
+      'regularly',
+      'often',
+      'sometimes',
+      'sometime',
+      'later',
+      'when i have time',
+      'on a day',
+      'during the week',
+      'this week',
+      'next week'
+    ]
+    
+    return vaguePatterns.some(pattern => lowerTranscript.includes(pattern))
+  }
+
+  async processVoiceInput(transcript: string, clarifyThreshold: number = 0.4): Promise<VoiceCalendarResult> {
     // Validate API key first
     if (!this.apiKey || this.apiKey.trim() === '') {
       console.error('VoiceCalendarIntegration: No API key provided')
@@ -185,6 +208,34 @@ export class VoiceCalendarIntegration {
           calendarEvents: [],
           clarifyingQuestions: questions,
           confidence: Math.min(result.confidence || 0.3, 0.4)
+        }
+      }
+
+      // Check if we need to force clarification for vague inputs
+      if (this.forceClarificationForVagueInput(transcript)) {
+        console.log('🔧 [VOICE] Forcing clarification for vague input:', transcript)
+        const questions = [
+          'What specific time?',
+          'Which day(s) of the week?', 
+          'How often should this repeat?',
+          'Which restaurant or location?'
+        ]
+        
+        return {
+          intent: 'needs_clarification',
+          tasks: [{
+            id: `clarify_${Date.now()}`,
+            title: '❓ Need more details',
+            summary: `Original request: "${transcript}"\n\nPlease provide more specific details.`,
+            priority: 'MEDIUM',
+            energy: 'LOW',
+            estimateMin: 5,
+            dueAt: undefined,
+            isRepeatable: false
+          }],
+          calendarEvents: [],
+          clarifyingQuestions: questions,
+          confidence: 0.2
         }
       }
 

@@ -219,13 +219,33 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
       
       const result = await cal.processVoiceInput(transcript, clarifyThreshold)
       
-      if (result.intent === 'needs_clarification') {
-        // Show clarification chat instead of staging
-        setClarificationQuestions(result.clarifyingQuestions || [
+      // Debug: log what the AI returned
+      console.log('🔧 [VOICE] AI result:', {
+        intent: result.intent,
+        confidence: result.confidence,
+        tasks: result.tasks?.length || 0,
+        clarifyingQuestions: result.clarifyingQuestions?.length || 0
+      })
+      
+      // Debug: log clarification decision
+      console.log('🔧 [VOICE] Clarification decision:', {
+        intent: result.intent,
+        confidence: result.confidence,
+        clarifyThreshold,
+        needsClarification: result.intent === 'needs_clarification',
+        lowConfidence: result.confidence && result.confidence < clarifyThreshold,
+        willShowChat: result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)
+      })
+      
+      if (result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)) {
+        // Show clarification chat - either explicit clarification needed or low confidence
+        const questions = result.clarifyingQuestions || [
           'What specific time?',
           'Which day(s) of the week?',
-          'How often should this repeat?'
-        ])
+          'How often should this repeat?',
+          'Which restaurant or location?'
+        ]
+        setClarificationQuestions(questions)
         setShowClarificationChat(true)
         toast.success('🤔 AI needs more details. Let\'s chat about it!')
         return
