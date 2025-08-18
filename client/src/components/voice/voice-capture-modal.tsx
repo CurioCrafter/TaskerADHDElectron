@@ -260,22 +260,25 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         showTaskProposals: result.tasks && result.tasks.length > 0
       })
       
-      // Always show clarification chat to get more details for perfect task creation
-      console.log('🔧 [VOICE] Opening clarification chat to get task details')
-      const questions = result.clarifyingQuestions || [
-        'What specific time should this task be done? (e.g., "6pm", "morning", "after lunch")',
-        'Which day(s) of the week should this task repeat? (e.g., "every Monday", "weekends only")',
-        'How often should this task repeat? (e.g., "daily", "weekly", "monthly")',
-        'What is the specific location or context for this task? (e.g., "at home", "at work", "at the gym")',
-        'What priority level should this task have? (Low, Medium, High, or Urgent)',
-        'How much energy will this task require? (Low energy = easy, High energy = challenging)',
-        'Are there any specific labels or categories for this task? (e.g., "work", "personal", "health", "finance")'
-      ]
-      setClarificationQuestions(questions)
-      setShowClarificationChat(true)
-      console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
-      toast.success('🤔 Let\'s get the details right for your perfectly formatted task!')
-      return
+      // For "Analyze Tasks" button, we want to generate tasks directly
+      // Only show clarification chat if the AI explicitly needs it
+      if (result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)) {
+        console.log('🔧 [VOICE] AI needs clarification, opening chat')
+        const questions = result.clarifyingQuestions || [
+          'What specific time should this task be done? (e.g., "6pm", "morning", "after lunch")',
+          'Which day(s) of the week should this task repeat? (e.g., "every Monday", "weekends only")',
+          'How often should this task repeat? (e.g., "daily", "weekly", "monthly")',
+          'What is the specific location or context for this task? (e.g., "at home", "at work", "at the gym")',
+          'What priority level should this task have? (Low, Medium, High, or Urgent)',
+          'How much energy will this task require? (Low energy = easy, High energy = challenging)',
+          'Are there any specific labels or categories for this task? (e.g., "work", "personal", "health", "finance")'
+        ]
+        setClarificationQuestions(questions)
+        setShowClarificationChat(true)
+        console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
+        toast.success('🤔 Let\'s get the details right for your perfectly formatted task!')
+        return
+      }
 
       // If we have a clear result, show it with high confidence
       if (result.calendarEvents && result.calendarEvents.length > 0) {
@@ -681,12 +684,23 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       🤖 Ready to create tasks from your voice?
                     </h4>
                     <p className="text-sm text-purple-700 dark:text-purple-200 mt-1">
-                      AI will analyze your transcript and then ask for details to create perfectly formatted tasks
+                      Choose how you want to create your task: Get interactive details or let AI analyze directly
                     </p>
                   </div>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
+                        // Always open clarification chat with comprehensive questions
+                        const questions = [
+                          'What specific time should this task be done? (e.g., "6pm", "morning", "after lunch")',
+                          'Which day(s) of the week should this task repeat? (e.g., "every Monday", "weekends only")',
+                          'How often should this task repeat? (e.g., "daily", "weekly", "monthly")',
+                          'What is the specific location or context for this task? (e.g., "at home", "at work", "at the gym")',
+                          'What priority level should this task have? (Low, Medium, High, or Urgent)',
+                          'How much energy will this task require? (Low energy = easy, High energy = challenging)',
+                          'Are there any specific labels or categories for this task? (e.g., "work", "personal", "health", "finance")'
+                        ]
+                        setClarificationQuestions(questions)
                         setShowClarificationChat(true)
                         toast.success('Opening clarification chat to get task details!')
                       }}

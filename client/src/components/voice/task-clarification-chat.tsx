@@ -59,7 +59,7 @@ export function TaskClarificationChat({
         {
           id: 'ai-intro',
           type: 'ai',
-          content: `Let's create a perfectly formatted task from: "${originalTranscript}"! I'll ask you some questions to get all the details right:`,
+          content: `Hi! I heard you say: "${originalTranscript}". Let me ask you some questions to understand exactly what you need so I can create the perfect task for you. Let's start with the basics:`,
           timestamp: new Date()
         },
         ...aiMessages
@@ -113,17 +113,66 @@ export function TaskClarificationChat({
       
       // Use a lower threshold for clarification chat to ensure we get detailed tasks
       const result = await cal.processVoiceInput(fullConversation, 0.1)
+      
+      // Debug: log what the AI returned
+      console.log('🔧 [CHAT] AI result:', {
+        intent: result.intent,
+        confidence: result.confidence,
+        tasks: result.tasks?.length || 0,
+        clarifyingQuestions: result.clarifyingQuestions?.length || 0
+      })
 
-      if (result.intent === 'needs_clarification') {
-        // Still needs more clarification
-        const questions = result.clarifyingQuestions || [
-          'What specific time should this task be done?',
-          'Which day(s) of the week should this task repeat?',
-          'How often should this task repeat?',
-          'What is the specific location or context for this task?'
-        ]
+      // Check if we have enough information to create a task
+      // The AI should be able to edit and refine the task based on conversation
+      const hasEnoughInfo = userResponses.split('\n').filter(r => r.trim()).length >= 1 && 
+                           result.confidence && result.confidence > 0.6
 
-        const aiMessages = questions.map((question, index) => ({
+      if (hasEnoughInfo && result.tasks && result.tasks.length > 0) {
+        // We have enough information to create the task
+        const task = result.tasks[0]
+        
+        // Enhance the task with any missing details from the conversation
+        const enhancedTask = enhanceTaskWithConversation(task, originalTranscript, messages, userMessage.content)
+        
+        setCurrentTask(enhancedTask)
+        
+        const aiMessage: ChatMessage = {
+          id: `ai-success-${Date.now()}`,
+          type: 'ai',
+          content: `Great! I think I have enough information now. Here's what I understand:\n\n**${enhancedTask.title}**\n${enhancedTask.summary || ''}\n\nDue: ${enhancedTask.dueAt ? new Date(enhancedTask.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${enhancedTask.priority || 'Medium'}\n${enhancedTask.isRepeatable ? '🔄 This will be a repeatable task' : ''}\n\nDoes this look right? If so, click "Create Perfect Task" below. If you want to add more details or make changes, just keep chatting with me! I can edit the task as we go.`,
+          timestamp: new Date()
+        }
+
+        setMessages(prev => [...prev, aiMessage])
+        toast.success('✅ Task is ready! Review and create, or keep chatting to refine it further!')
+      } else if (userResponses.split('\n').filter(r => r.trim()).length >= 1) {
+        // We have some information but need more - let's build a partial task
+        const partialTask = buildPartialTaskFromConversation(originalTranscript, messages, userMessage.content)
+        setCurrentTask(partialTask)
+        
+        const aiMessage: ChatMessage = {
+          id: `ai-partial-${Date.now()}`,
+          type: 'ai',
+          content: `I'm building your task! Here's what I have so far:\n\n**${partialTask.title}**\n${partialTask.summary || ''}\n\nDue: ${partialTask.dueAt ? new Date(partialTask.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${partialTask.priority || 'Medium'}\n\nI still need a bit more information to make it perfect. Keep chatting with me!`,
+          timestamp: new Date()
+        }
+
+        setMessages(prev => [...prev, aiMessage])
+        toast.success('🔄 Building your task! Keep providing details...')
+      } else {
+        // Still need more information - ask follow-up questions
+        // The AI can adapt these questions based on what you've already told us
+        const followUpQuestions = (result.clarifyingQuestions || [
+          'What specific time should this task be done? (e.g., "6pm", "morning", "after lunch")',
+          'Which day(s) of the week should this task repeat? (e.g., "every Monday", "weekends only")',
+          'How often should this task repeat? (e.g., "daily", "weekly", "monthly")',
+          'What is the specific location or context for this task? (e.g., "at home", "at work", "at the gym")',
+          'What priority level should this task have? (Low, Medium, High, or Urgent)',
+          'How much energy will this task require? (Low energy = easy, High energy = challenging)',
+          'Are there any specific labels or categories for this task? (e.g., "work", "personal", "health", "finance")'
+        ]).slice(0, 2) // Ask 2 questions at a time to avoid overwhelming
+        
+        const aiMessages = followUpQuestions.map((question: string, index: number) => ({
           id: `ai-followup-${Date.now()}-${index}`,
           type: 'ai' as const,
           content: question,
@@ -132,29 +181,7 @@ export function TaskClarificationChat({
         }))
 
         setMessages(prev => [...prev, ...aiMessages])
-        toast('🤔 Need a bit more information...')
-      } else {
-        // We have enough information to create the task
-        if (result.tasks && result.tasks.length > 0) {
-          const task = result.tasks[0]
-          
-          // Enhance the task with any missing details from the conversation
-          const enhancedTask = enhanceTaskWithConversation(task, originalTranscript, messages, userMessage.content)
-          
-          setCurrentTask(enhancedTask)
-          
-          const aiMessage: ChatMessage = {
-            id: `ai-success-${Date.now()}`,
-            type: 'ai',
-            content: `Perfect! I have enough information now. Here's the perfectly formatted task I'm going to create:\n\n**${enhancedTask.title}**\n${enhancedTask.summary || ''}\n\nDue: ${enhancedTask.dueAt ? new Date(enhancedTask.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${enhancedTask.priority || 'Medium'}\n${enhancedTask.isRepeatable ? '🔄 This will be a repeatable task' : ''}`,
-            timestamp: new Date()
-          }
-
-          setMessages(prev => [...prev, aiMessage])
-          toast.success('✅ Perfect! Task is perfectly formatted and ready!')
-        } else {
-          throw new Error('No task generated from conversation')
-        }
+        toast('🤔 Thanks! Let me ask a few more questions to get this perfect. Feel free to elaborate on any of these!')
       }
     } catch (error) {
       console.error('Chat processing failed:', error)
@@ -173,7 +200,41 @@ export function TaskClarificationChat({
     }
   }
 
+  // Function to build a partial task from conversation context
+  const buildPartialTaskFromConversation = (originalTranscript: string, messages: ChatMessage[], latestResponse: string): any => {
+    const partialTask: any = {
+      id: `partial-${Date.now()}`,
+      title: originalTranscript.trim(),
+      summary: `Task being built from voice input: "${originalTranscript.trim()}"`,
+      priority: 'MEDIUM' as const,
+      energy: 'MEDIUM' as const,
+      dueAt: undefined as any,
+      isRepeatable: false,
+      labels: [],
+      subtasks: [],
+      confidence: 0.7
+    }
+    
+    // Extract day information from conversation if available
+    const dayMatch = extractDayFromConversation(originalTranscript, messages, latestResponse)
+    if (dayMatch) {
+      partialTask.dueAt = dayMatch
+    }
+    
+    // Extract time information if available
+    const timeMatch = extractTimeFromConversation(originalTranscript, messages, latestResponse)
+    if (timeMatch && partialTask.dueAt) {
+      const currentDate = partialTask.dueAt instanceof Date ? partialTask.dueAt : new Date(partialTask.dueAt)
+      const [hours, minutes] = timeMatch.split(':').map(Number)
+      currentDate.setHours(hours, minutes, 0, 0)
+      partialTask.dueAt = currentDate.toISOString()
+    }
+    
+    return partialTask
+  }
+
   // Function to enhance task with conversation context and fill missing details
+  // This function can be called multiple times as the AI refines the task
   const enhanceTaskWithConversation = (task: any, originalTranscript: string, messages: ChatMessage[], latestResponse: string): any => {
     const enhancedTask = { ...task }
     
@@ -277,6 +338,12 @@ export function TaskClarificationChat({
       onClose()
       toast.success('🎯 Perfect task created successfully!')
     }
+  }
+
+  // Function to allow AI to edit the task during conversation
+  const handleAIEditTask = (updatedTask: any) => {
+    setCurrentTask(updatedTask)
+    toast.success('✅ Task updated based on our conversation!')
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -385,7 +452,7 @@ export function TaskClarificationChat({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Provide details to create a perfect task..."
+                placeholder="Tell me more details or ask me to modify the task..."
                 className="input flex-1"
                 disabled={isProcessing}
               />
@@ -399,6 +466,43 @@ export function TaskClarificationChat({
                 ) : (
                   'Send'
                 )}
+              </button>
+              {currentTask && (
+                <button
+                  onClick={() => {
+                    const aiMessage: ChatMessage = {
+                      id: `ai-task-preview-${Date.now()}`,
+                      type: 'ai',
+                      content: `Here's the current task state:\n\n**${currentTask.title}**\n${currentTask.summary || ''}\n\nDue: ${currentTask.dueAt ? new Date(currentTask.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${currentTask.priority || 'Medium'}\n${currentTask.isRepeatable ? '🔄 This will be a repeatable task' : ''}\n\nWhat would you like me to change or add?`,
+                      timestamp: new Date()
+                    }
+                    setMessages(prev => [...prev, aiMessage])
+                  }}
+                  className="btn-ghost text-xs"
+                  title="Show current task state"
+                >
+                  📋 Show Task
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  // Show what the AI has gathered so far
+                  const currentUserResponses = messages
+                    .filter(m => m.type === 'user')
+                    .map(m => m.content)
+                    .join('\n')
+                  const aiMessage: ChatMessage = {
+                    id: `ai-progress-${Date.now()}`,
+                    type: 'ai',
+                    content: `Let me show you what I've gathered so far:\n\n**Original:** "${originalTranscript}"\n**Your responses:** ${currentUserResponses || 'None yet'}\n\nI'm working on building a complete task with all the details. Keep chatting with me to add more information!`,
+                    timestamp: new Date()
+                  }
+                  setMessages(prev => [...prev, aiMessage])
+                }}
+                className="btn-ghost text-xs"
+                title="Show AI progress"
+              >
+                🔍 Show Progress
               </button>
             </div>
           )}
