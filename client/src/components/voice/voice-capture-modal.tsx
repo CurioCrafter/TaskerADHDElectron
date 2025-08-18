@@ -260,23 +260,22 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         showTaskProposals: result.tasks && result.tasks.length > 0
       })
       
-      // Only show clarification chat if AI explicitly needs clarification
-      // "Analyze Tasks" should be the default high-confidence option
-      if (result.intent === 'needs_clarification') {
-        // Show clarification chat only when AI explicitly needs clarification
-        console.log('🔧 [VOICE] Opening clarification chat with questions:', result.clarifyingQuestions)
-        const questions = result.clarifyingQuestions || [
-          'What specific time should this task be done?',
-          'Which day(s) of the week should this task repeat?',
-          'How often should this task repeat?',
-          'What is the specific location or context for this task?'
-        ]
-        setClarificationQuestions(questions)
-        setShowClarificationChat(true)
-        console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
-        toast.success('🤔 AI needs more details to create a perfect task. Let\'s chat about it!')
-        return
-      }
+      // Always show clarification chat to get more details for perfect task creation
+      console.log('🔧 [VOICE] Opening clarification chat to get task details')
+      const questions = result.clarifyingQuestions || [
+        'What specific time should this task be done? (e.g., "6pm", "morning", "after lunch")',
+        'Which day(s) of the week should this task repeat? (e.g., "every Monday", "weekends only")',
+        'How often should this task repeat? (e.g., "daily", "weekly", "monthly")',
+        'What is the specific location or context for this task? (e.g., "at home", "at work", "at the gym")',
+        'What priority level should this task have? (Low, Medium, High, or Urgent)',
+        'How much energy will this task require? (Low energy = easy, High energy = challenging)',
+        'Are there any specific labels or categories for this task? (e.g., "work", "personal", "health", "finance")'
+      ]
+      setClarificationQuestions(questions)
+      setShowClarificationChat(true)
+      console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
+      toast.success('🤔 Let\'s get the details right for your perfectly formatted task!')
+      return
 
       // If we have a clear result, show it with high confidence
       if (result.calendarEvents && result.calendarEvents.length > 0) {
@@ -286,11 +285,35 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
       } else if (result.tasks && result.tasks.length > 0) {
         // Boost confidence for "Analyze Tasks" - this is the default high-confidence option
         const boostedConfidence = Math.max(result.confidence || 0.8, 0.9)
+        
+        // Map VoiceCalendarResult tasks to TaskShapingResult format with ALL repeatable fields
+        const mappedTasks = result.tasks.map(task => ({
+          id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          title: task.title,
+          summary: task.summary,
+          priority: task.priority,
+          energy: task.energy,
+          dueAt: task.dueAt,
+          estimateMin: task.estimateMin,
+          labels: [], // VoiceCalendarResult doesn't have labels
+          subtasks: [], // VoiceCalendarResult doesn't have subtasks
+          confidence: boostedConfidence,
+          reasoning: `AI-generated task from voice input: "${transcript}"`,
+          isRepeatable: task.isRepeatable || false,
+          // Map ALL repeatable fields
+          repeatPattern: task.repeatPattern,
+          repeatInterval: task.repeatInterval,
+          repeatDays: task.repeatDays,
+          repeatEndDate: task.repeatEndDate,
+          repeatCount: task.repeatCount,
+          parentTaskId: task.parentTaskId,
+          nextDueDate: task.nextDueDate
+        }))
+        
+        console.log('🔧 [VOICE] Mapped tasks with repeatable fields:', mappedTasks)
+        
         setTaskProposals({
-          tasks: result.tasks.map(task => ({
-            ...task,
-            confidence: boostedConfidence
-          })),
+          tasks: mappedTasks,
           processingTime: Date.now() - Date.now()
         })
         setShowProposals(true)
@@ -658,19 +681,19 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       🤖 Ready to create tasks from your voice?
                     </h4>
                     <p className="text-sm text-purple-700 dark:text-purple-200 mt-1">
-                      AI will analyze your transcript and suggest perfectly formatted tasks
+                      AI will analyze your transcript and then ask for details to create perfectly formatted tasks
                     </p>
                   </div>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
                         setShowClarificationChat(true)
-                        toast.success('Opening clarification chat to create a perfect task!')
+                        toast.success('Opening clarification chat to get task details!')
                       }}
                       className="btn-ghost flex items-center space-x-2 text-xs"
-                      title="Ask for more details to create a perfect task"
+                      title="Get more details to create a perfect task"
                     >
-                      ❓ Ask for Details
+                      💬 Get Task Details
                     </button>
                     <button
                       onClick={handleShapeIntoTasks}

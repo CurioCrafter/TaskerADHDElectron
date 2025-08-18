@@ -237,7 +237,17 @@ export class VoiceCalendarIntegration {
       
       // ALWAYS ask for clarification if confidence is low or if the input seems vague
       const isVague = this.isInputVague(transcript)
-      const needsClarification = (result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0) && !hasSufficientDetails
+      const needsClarification = (result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0)
+      
+      // Remove the hasSufficientDetails check that was blocking clarification
+      console.log('🔧 [VOICE] Clarification decision:', {
+        needsClarification,
+        reason: {
+          lowConfidence: result.confidence <= threshold,
+          isVague,
+          noCalendarEvents: !result.calendarEvents || result.calendarEvents.length === 0
+        }
+      })
       
       console.log('🔧 [VOICE] Clarification analysis:', {
         transcript,
@@ -285,12 +295,6 @@ export class VoiceCalendarIntegration {
         console.log('🔧 [VOICE] Forcing clarification for vague input:', transcript)
         const questions = this.generateClarifyingQuestions(transcript, result)
         
-        // If no questions are needed, don't ask for clarification
-        if (questions.length === 0) {
-          console.log('🔧 [VOICE] No clarification questions needed - proceeding with task creation')
-          return this.processCalendarResult(result)
-        }
-        
         console.log('🔧 [VOICE] Forcing clarification with questions:', questions)
         
         return {
@@ -310,6 +314,82 @@ export class VoiceCalendarIntegration {
           confidence: 0.2
         }
       }
+
+             // FORCE ALL REQUIRED FIELDS for daily and weekly patterns BEFORE processing
+       console.log('🔧 [VOICE] Processing transcript for forced field setting:', transcript)
+       if (result.tasks && result.tasks.length > 0) {
+         result.tasks = result.tasks.map((task: any) => {
+           const lower = transcript.toLowerCase()
+           if (lower.includes('every day') || lower.includes('everyday') || lower.includes('daily')) {
+             console.log('🔧 [VOICE] FORCING ALL required fields for daily task:', task.title)
+             
+             // Get tomorrow at 9am as default due date
+             const defaultDueDate = this.getTomorrowAt9AM()
+             
+             const forcedTask = {
+               ...task,
+               // Force all repeatable fields
+               isRepeatable: true,
+               repeatPattern: 'daily',
+               repeatInterval: 1,
+               repeatDays: [0, 1, 2, 3, 4, 5, 6], // Every day of the week
+               repeatCount: 365,
+               repeatEndDate: this.getEndOfNextYear(),
+               
+               // Force due date to tomorrow 9am if not set
+               dueAt: task.dueAt || defaultDueDate,
+               
+               // Ensure other required fields are set
+               priority: task.priority || 'MEDIUM',
+               energy: task.energy || 'MEDIUM',
+               estimateMin: task.estimateMin || 30,
+               
+               // Set summary if missing
+               summary: task.summary || `Daily recurring task: ${task.title}`,
+               
+               // Ensure ID is set
+               id: task.id || `daily_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+             }
+             
+             console.log('🔧 [VOICE] Forced daily task fields:', JSON.stringify(forcedTask, null, 2))
+             return forcedTask
+           } else if (lower.includes('every week') || lower.includes('weekly') || lower.includes('every weekend')) {
+             console.log('🔧 [VOICE] FORCING ALL required fields for weekly task:', task.title)
+             
+             const isWeekend = lower.includes('every weekend')
+             const defaultDueDate = isWeekend ? this.getNextSaturdayAt10AM() : this.getNextMondayAt9AM()
+             
+             const forcedTask = {
+               ...task,
+               // Force all repeatable fields
+               isRepeatable: true,
+               repeatPattern: 'weekly',
+               repeatInterval: 1,
+               repeatDays: isWeekend ? [0, 6] : [1], // [0,6] for weekends, [1] for weekly
+               repeatCount: 52,
+               repeatEndDate: this.getEndOfNextYear(),
+               
+               // Force due date if not set
+               dueAt: task.dueAt || defaultDueDate,
+               
+               // Ensure other required fields are set
+               priority: task.priority || 'MEDIUM',
+               energy: task.energy || 'MEDIUM',
+               estimateMin: task.estimateMin || 30,
+               
+               // Set summary if missing
+               summary: task.summary || `Weekly recurring task: ${task.title}`,
+               
+               // Ensure ID is set
+               id: task.id || `weekly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+             }
+             
+             console.log('🔧 [VOICE] Forced weekly task fields:', JSON.stringify(forcedTask, null, 2))
+             return forcedTask
+           }
+           return task
+         })
+       }
 
       return this.processCalendarResult(result)
     } catch (error) {
@@ -335,11 +415,11 @@ export class VoiceCalendarIntegration {
 IMPORTANT: You must respond with valid JSON only. No other text.
 
 CRITICAL RULES:
-1. If the voice input is ambiguous about timing, location, or specifics, you MUST set confidence to 0.4 or lower and create a clarifying question task instead of guessing.
+1. ALWAYS set confidence to 0.4 or lower for ANY input that lacks specific details about timing, location, or frequency.
 2. DO NOT split single requests into multiple tasks unless explicitly requested (e.g., "create 3 tasks for...")
 3. If someone says "every weekend" or similar recurring language, create ONE repeatable task/event, not multiple separate ones
-4. Be SKEPTICAL and ask questions for vague plans
-5. If the input already contains specific time, day, and action details, DO NOT ask for clarification - proceed with task creation
+4. Be EXTREMELY SKEPTICAL and ask questions for ANY vague or unclear plans
+5. ONLY proceed without clarification if the input has ALL of: specific time, specific day, and specific action details
 
 ALWAYS ASK CLARIFYING QUESTIONS FOR:
 - Vague timing: "sometime this week", "on a day during the week", "later"
@@ -379,21 +459,29 @@ For recurring patterns:
 - "weekly" = weekly recurrence (same day of week)
 - "monthly" = monthly recurrence
 
-CRITICAL: When you see "every day", "everyday", or "daily", ALWAYS set:
+CRITICAL: When you see "every week", "weekly", "every weekend", "every day", "daily", or "everyday", ALWAYS set:
 - isRepeatable: true
-- repeatPattern: "daily"
+- repeatPattern: "weekly" (for weekly patterns) or "daily" (for daily patterns)
 - repeatInterval: 1
-- dueAt: tomorrow at 9am (if no specific time given)
-- repeatCount: 365
+- repeatDays: [1] for "every week", [0,6] for "every weekend", [0,1,2,3,4,5,6] for "every day"
+- dueAt: next Monday 9am for weekly, tomorrow 9am for daily - MUST be a valid ISO date string
+- repeatCount: 52 for weekly, 365 for daily
 - repeatEndDate: end of next year
+- priority: "MEDIUM" (if not specified)
+- energy: "MEDIUM" (if not specified)
+- estimateMin: 30 (if not specified)
+- summary: "Weekly recurring task: [title]" or "Daily recurring task: [title]"
 
-MANDATORY: For "every day" patterns, you MUST set a specific due date (tomorrow at 9am) and make it repeatable. Do not leave dueAt as null or undefined.
+MANDATORY: For "every week", "every weekend", "every day", "daily", or "weekly" patterns, you MUST set a specific due date and make it repeatable. Do not leave dueAt as null or undefined. ALL fields must be populated.
 
 IMPORTANT: For repeatable tasks without a specific end date, automatically set repeatEndDate to today's date to prevent infinite repetition.
+
+CRITICAL: Always include the "transcript" field in your response with the exact original voice input text.
 
 Response format:
 {
   "intent": "task_only" | "calendar_only" | "task_and_calendar" | "needs_clarification",
+  "transcript": "original voice input",
   "tasks": [
     {
       "id": "unique_id",
@@ -438,19 +526,19 @@ IMPORTANT: For "every day" patterns, dueAt MUST be a valid ISO date string (e.g.
 }
 
 Examples:
-- "Set a recurring reminder for Chick-fil-A every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
-- "I want to eat pizza every week" → SMART DEFAULT: Set to next Monday at 9am, weekly repeat, confidence 0.8
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], dueAt: "next-monday-9am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
-- "I want to go eat pizza every weekend" → SMART DEFAULT: Set to next Saturday at 10am, weekly repeat on weekends, confidence 0.8
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], dueAt: "next-saturday-10am", repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
-- "I want chicken every day" → SMART DEFAULT: Set to tomorrow at 9am, daily repeat, confidence 0.8
-  Task: isRepeatable: true, repeatPattern: "daily", repeatInterval: 1, dueAt: "2024-12-26T09:00:00.000Z" (tomorrow 9am), repeatCount: 365, repeatEndDate: "2024-12-31T23:59:59.000Z"
-- "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
+- "Set a recurring reminder every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
+  Response: { "transcript": "Set a recurring reminder every weekend at 6pm", "tasks": [{ "isRepeatable": true, "repeatPattern": "weekly", "repeatInterval": 1, "repeatDays": [0,6], "repeatCount": 52, "repeatEndDate": "2024-12-31T23:59:59.000Z", "dueAt": "2024-12-28T18:00:00.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Weekly recurring task: Set a recurring reminder every weekend at 6pm" }] }
+- "I want to exercise every week" → SMART DEFAULT: Set to next Monday at 9am, weekly repeat, confidence 0.8
+  Response: { "transcript": "I want to exercise every week", "tasks": [{ "isRepeatable": true, "repeatPattern": "weekly", "repeatInterval": 1, "repeatDays": [1], "dueAt": "2024-12-30T09:00:00.000Z", "repeatCount": 52, "repeatEndDate": "2024-12-31T23:59:59.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Weekly recurring task: I want to exercise every week" }] }
+- "I want to go out every weekend" → SMART DEFAULT: Set to next Saturday at 10am, weekly repeat on weekends, confidence 0.8
+  Response: { "transcript": "I want to go out every weekend", "tasks": [{ "isRepeatable": true, "repeatPattern": "weekly", "repeatInterval": 1, "repeatDays": [0,6], "dueAt": "2024-12-28T10:00:00.000Z", "repeatCount": 52, "repeatEndDate": "2024-12-31T23:59:59.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Weekly recurring task: I want to go out every weekend" }] }
+- "I want to meditate every day" → SMART DEFAULT: Set to tomorrow at 9am, daily repeat, confidence 0.8
+  Response: { "transcript": "I want to meditate every day", "tasks": [{ "isRepeatable": true, "repeatPattern": "daily", "repeatInterval": 1, "repeatDays": [0,1,2,3,4,5,6], "dueAt": "2024-12-26T09:00:00.000Z", "repeatCount": 365, "repeatEndDate": "2024-12-31T23:59:59.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Daily recurring task: I want to meditate every day" }] }
+- "Go to the gym on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
 - "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
+  Response: { "transcript": "Daily standup at 9am weekdays", "tasks": [{ "isRepeatable": true, "repeatPattern": "weekly", "repeatInterval": 1, "repeatDays": [1,2,3,4,5], "repeatCount": 52, "repeatEndDate": "2024-12-31T23:59:59.000Z", "dueAt": "2024-12-26T09:00:00.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Weekly recurring task: Daily standup at 9am weekdays" }] }
 - "Review project every Monday morning at 9am" → ONE repeatable task + weekly calendar (Mondays 9am), confidence 0.9
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
+  Response: { "transcript": "Review project every Monday morning at 9am", "tasks": [{ "isRepeatable": true, "repeatPattern": "weekly", "repeatInterval": 1, "repeatDays": [1], "repeatCount": 52, "repeatEndDate": "2024-12-31T23:59:59.000Z", "dueAt": "2024-12-30T09:00:00.000Z", "priority": "MEDIUM", "energy": "MEDIUM", "estimateMin": 30, "summary": "Weekly recurring task: Review project every Monday morning at 9am" }] }
 
 Current date/time context: ${new Date().toISOString()}
 User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
@@ -526,6 +614,45 @@ Voice input: "${transcript}"`;
       // Apply smart defaults for repeatable tasks
       let processedTask = this.applySmartDefaults(task)
       
+             // FORCE ALL REQUIRED FIELDS for daily and weekly patterns
+       const lower = (result.transcript || '').toLowerCase()
+       if (lower.includes('every day') || lower.includes('everyday') || lower.includes('daily')) {
+         console.log('🔧 [VOICE] Final validation: Ensuring ALL fields for daily task:', processedTask.title)
+         processedTask = {
+           ...processedTask,
+           isRepeatable: true,
+           repeatPattern: 'daily',
+           repeatInterval: 1,
+           repeatDays: [0, 1, 2, 3, 4, 5, 6],
+           repeatCount: 365,
+           repeatEndDate: this.getEndOfNextYear(),
+           dueAt: processedTask.dueAt || this.getTomorrowAt9AM(),
+           priority: processedTask.priority || 'MEDIUM',
+           energy: processedTask.energy || 'MEDIUM',
+           estimateMin: processedTask.estimateMin || 30,
+           summary: processedTask.summary || `Daily recurring task: ${processedTask.title}`,
+           id: processedTask.id || `daily_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+         }
+       } else if (lower.includes('every week') || lower.includes('weekly') || lower.includes('every weekend')) {
+         console.log('🔧 [VOICE] Final validation: Ensuring ALL fields for weekly task:', processedTask.title)
+         const isWeekend = lower.includes('every weekend')
+         processedTask = {
+           ...processedTask,
+           isRepeatable: true,
+           repeatPattern: 'weekly',
+           repeatInterval: 1,
+           repeatDays: isWeekend ? [0, 6] : [1], // [0,6] for weekends, [1] for weekly
+           repeatCount: 52,
+           repeatEndDate: this.getEndOfNextYear(),
+           dueAt: processedTask.dueAt || (isWeekend ? this.getNextSaturdayAt10AM() : this.getNextMondayAt9AM()),
+           priority: processedTask.priority || 'MEDIUM',
+           energy: processedTask.energy || 'MEDIUM',
+           estimateMin: processedTask.estimateMin || 30,
+           summary: processedTask.summary || `Weekly recurring task: ${processedTask.title}`,
+           id: processedTask.id || `weekly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+         }
+       }
+      
       // Auto-set end date for repeatable tasks without an end date
       if (processedTask.isRepeatable && !processedTask.repeatEndDate) {
         const today = new Date()
@@ -541,7 +668,8 @@ Voice input: "${transcript}"`;
       intent: result.intent || 'task_and_calendar',
       tasks,
       calendarEvents: events,
-      confidence: Math.max(0, Math.min(1, result.confidence || 0.8))
+      confidence: Math.max(0, Math.min(1, result.confidence || 0.8)),
+      transcript: result.transcript || '' // Pass transcript for field forcing
     }
     
     console.log('🔧 [VOICE] Final processed result:', JSON.stringify(finalResult, null, 2))
@@ -827,12 +955,14 @@ Voice input: "${transcript}"`;
       questions.push('Where should this happen?')
     }
     
-    // If we have all the essential details, don't ask unnecessary questions
-    if (questions.length === 0 && hasTime && hasDay && hasAction) {
-      console.log('🔧 [VOICE] All essential details provided - no clarification questions needed')
-      return []
+    // Always return at least one question for vague inputs
+    if (questions.length === 0) {
+      questions.push('What specific time?')
+      questions.push('Which day?')
+      questions.push('How often should this repeat?')
     }
     
+    console.log('🔧 [VOICE] Generated clarification questions:', questions)
     return questions
   }
 
@@ -875,6 +1005,32 @@ Voice input: "${transcript}"`;
     
     console.log('🔧 [VOICE] Input lacks sufficient details:', { hasTime, hasDay, hasAction, hasRecurrence })
     return false
+  }
+
+  private getTomorrowAt9AM(): string {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(9, 0, 0, 0)
+    return tomorrow.toISOString()
+  }
+
+  private getNextMondayAt9AM(): string {
+    const nextMonday = this.getNextDayOfWeek(1) // Monday = 1
+    nextMonday.setHours(9, 0, 0, 0)
+    return nextMonday.toISOString()
+  }
+
+  private getNextSaturdayAt10AM(): string {
+    const nextSaturday = this.getNextDayOfWeek(6) // Saturday = 6
+    nextSaturday.setHours(10, 0, 0, 0)
+    return nextSaturday.toISOString()
+  }
+
+  private getEndOfNextYear(): string {
+    const endOfNextYear = new Date()
+    endOfNextYear.setFullYear(endOfNextYear.getFullYear() + 1, 11, 31)
+    endOfNextYear.setHours(23, 59, 59, 999)
+    return endOfNextYear.toISOString()
   }
 }
 

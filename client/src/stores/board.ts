@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { Board, Task, Column, TaskPriority, EnergyLevel, BoardType, BoardPriority, BoardStatus } from '@/types'
+import { toast } from 'react-hot-toast'
+import type { Board, Task, BoardColumn, TaskPriority, EnergyLevel, BoardType } from '@/types/task.types'
 import { getAuthHeaders } from './auth'
 
 interface BoardState {
@@ -23,8 +24,6 @@ interface BoardState {
     name: string
     description?: string
     type?: BoardType
-    priority?: BoardPriority
-    status?: BoardStatus
     dueDate?: string
     tags?: string[]
     metadata?: any
@@ -33,25 +32,31 @@ interface BoardState {
   deleteBoard: (boardId: string) => Promise<void>
   createTask: (task: {
     title: string
-    summary?: string
+    description?: string
     priority?: TaskPriority
     energy?: EnergyLevel
-    dueAt?: string
-    estimateMin?: number
+    dueDate?: string | Date
+    estimatedMinutes?: number
     labels?: string[]
     columnId?: string
     // Repeat data
-    isRepeatable?: boolean
-    repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+    isRepeating?: boolean
+    repeatPattern?: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM'
     repeatInterval?: number
     repeatDays?: number[]
-    repeatEndDate?: string
+    repeatEndDate?: string | Date
     repeatCount?: number
+    // Voice/AI fields
+    confidence?: number
+    sourceTranscript?: string
+    aiGenerated?: boolean
+    isDemo?: boolean
   }) => Promise<Task | null>
   moveTask: (taskId: string, columnId: string, position: number) => Promise<void>
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (taskId: string) => Promise<void>
   purgeDemoTasks: () => Promise<void>
+  addDemoTasks: () => Promise<void>
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -159,8 +164,6 @@ export const useBoardStore = create<BoardState>()(
             body: JSON.stringify({
               ...boardData,
               type: boardData.type || 'PROJECT',
-              priority: boardData.priority || 'MEDIUM',
-              status: boardData.status || 'PLANNING',
               tags: boardData.tags || [],
               columns: defaultColumns
             })
@@ -257,9 +260,9 @@ export const useBoardStore = create<BoardState>()(
         console.log('🔧 [STORE] Current board:', { id: currentBoard.id, name: currentBoard.name })
         
         // Debug: log repeatable fields specifically
-        if (taskData.isRepeatable) {
+        if (taskData.isRepeating) {
           console.log('🔧 [STORE] Repeatable task details:', {
-            isRepeatable: taskData.isRepeatable,
+            isRepeating: taskData.isRepeating,
             repeatPattern: taskData.repeatPattern,
             repeatInterval: taskData.repeatInterval,
             repeatDays: taskData.repeatDays,
@@ -498,6 +501,7 @@ export const useBoardStore = create<BoardState>()(
         try {
           const { boards } = get()
           let deletedCount = 0
+          let errorCount = 0
 
           // Go through all boards and delete demo tasks
           for (const board of boards) {
@@ -518,16 +522,39 @@ export const useBoardStore = create<BoardState>()(
                     demoTaskTitles.includes(task.title)
                   )
                   
+                  console.log(`🗑️ [BOARD] Found ${tasksToDelete.length} demo tasks to delete in column ${column.name}`)
+                  
                   // Delete all demo tasks in this column
                   for (const task of tasksToDelete) {
                     try {
-                      console.log(`🗑️ [BOARD] Deleting demo task: ${task.title}`)
-                      await get().deleteTask(task.id)
-                      deletedCount++
+                      console.log(`🗑️ [BOARD] Deleting demo task: ${task.title} (ID: ${task.id})`)
+                      
+                      // Call the delete API directly to ensure it works
+                      const authHeaders = getAuthHeaders()
+                      if (authHeaders) {
+                        const response = await fetch(`${API_URL}/api/tasks/${task.id}`, {
+                          method: 'DELETE',
+                          headers: authHeaders
+                        })
+                        
+                        if (response.ok) {
+                          console.log(`✅ [BOARD] Successfully deleted demo task: ${task.title}`)
+                          deletedCount++
+                        } else {
+                          const errorText = await response.text()
+                          console.error(`❌ [BOARD] Failed to delete demo task: ${task.title}`, response.status, errorText)
+                          errorCount++
+                        }
+                      } else {
+                        console.error(`❌ [BOARD] No auth headers available for deleting demo task: ${task.title}`)
+                        errorCount++
+                      }
+                      
                       // Small delay to ensure deletion completes
-                      await new Promise(resolve => setTimeout(resolve, 100))
+                      await new Promise(resolve => setTimeout(resolve, 200))
                     } catch (error) {
                       console.error('Failed to delete demo task:', task.title, error)
+                      errorCount++
                     }
                   }
                 }
@@ -535,9 +562,16 @@ export const useBoardStore = create<BoardState>()(
             }
           }
 
-          // Don't fetch boards again - just update the local state
-          // This prevents demo tasks from being recreated
-          console.log(`🗑️ [BOARD] Purged ${deletedCount} demo tasks`)
+          console.log(`🗑️ [BOARD] Purged ${deletedCount} demo tasks, ${errorCount} errors`)
+          
+          // Clear the localStorage flag so demo tasks can be recreated if needed
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('demoTasksAdded')
+            console.log('🗑️ [BOARD] Cleared demoTasksAdded flag from localStorage')
+          }
+          
+          // Now refresh the boards to get the updated state
+          await get().fetchBoards()
           
           // Dispatch event to notify calendar that tasks have been updated
           if (typeof window !== 'undefined') {
@@ -545,9 +579,155 @@ export const useBoardStore = create<BoardState>()(
           }
           
           set({ isLoading: false })
+          
+          // Show success/error message
+          if (errorCount === 0) {
+            toast.success(`Successfully removed ${deletedCount} demo tasks!`)
+          } else if (deletedCount > 0) {
+            toast.success(`Removed ${deletedCount} demo tasks, but ${errorCount} failed`)
+          } else {
+            toast.error(`Failed to remove demo tasks. Check console for details.`)
+          }
         } catch (error) {
           console.error('Failed to purge demo tasks:', error)
           set({ error: 'Failed to purge demo tasks', isLoading: false })
+          toast.error('Failed to purge demo tasks. Check console for details.')
+        }
+      },
+
+      // Add demo tasks manually
+      addDemoTasks: async () => {
+        set({ isLoading: true, error: null })
+
+        try {
+          // Check if demo tasks are enabled in settings
+          const { areDemoTasksEnabled } = await import('@/stores/settings')
+          if (!areDemoTasksEnabled()) {
+            toast.error('Demo tasks are disabled in settings. Enable them first to add demo tasks.')
+            set({ isLoading: false })
+            return
+          }
+
+          const { boards } = get()
+          if (!boards || boards.length === 0) {
+            toast.error('No boards available to add demo tasks to')
+            set({ isLoading: false })
+            return
+          }
+
+          const defaultBoard = boards[0]
+          const { setCurrentBoard, createTask } = get()
+          
+          // Temporarily set the default board as current
+          setCurrentBoard(defaultBoard)
+          
+          const demoTasks = [
+            {
+              title: 'Daily Standup',
+              description: 'Team daily standup meeting',
+              priority: 'HIGH' as const,
+              energy: 'LOW' as const,
+              dueDate: new Date().toISOString(),
+              estimatedMinutes: 15,
+              isRepeating: true,
+              repeatPattern: 'DAILY' as const,
+              repeatInterval: 1,
+              columnId: defaultBoard.columns?.[0]?.id || 'default',
+              labels: ['work', 'meeting', 'daily'],
+              isDemo: true,
+              aiGenerated: true
+            },
+            {
+              title: 'Weekly Review',
+              description: 'Review progress and plan next week',
+              priority: 'MEDIUM' as const,
+              energy: 'MEDIUM' as const,
+              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+              estimatedMinutes: 60,
+              isRepeating: true,
+              repeatPattern: 'WEEKLY' as const,
+              repeatInterval: 1,
+              repeatDays: [1], // Monday
+              columnId: defaultBoard.columns?.[0]?.id || 'default',
+              labels: ['work', 'planning', 'weekly'],
+              isDemo: true,
+              aiGenerated: true
+            },
+            {
+              title: 'Monthly Budget Review',
+              description: 'Review monthly expenses and budget',
+              priority: 'MEDIUM' as const,
+              energy: 'LOW' as const,
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              estimatedMinutes: 45,
+              isRepeating: true,
+              repeatPattern: 'MONTHLY' as const,
+              repeatInterval: 1,
+              columnId: defaultBoard.columns?.[0]?.id || 'default',
+              labels: ['personal', 'finance', 'monthly'],
+              isDemo: true,
+              aiGenerated: true
+            },
+            {
+              title: 'Grocery Shopping',
+              description: 'Weekly grocery shopping trip',
+              priority: 'MEDIUM' as const,
+              energy: 'LOW' as const,
+              dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+              estimatedMinutes: 90,
+              isRepeating: true,
+              repeatPattern: 'WEEKLY' as const,
+              repeatInterval: 1,
+              repeatDays: [0, 6], // Weekend
+              columnId: defaultBoard.columns?.[0]?.id || 'default',
+              labels: ['personal', 'shopping', 'weekly'],
+              isDemo: true,
+              aiGenerated: true
+            },
+            {
+              title: 'Project Deadline',
+              description: 'Important project milestone',
+              priority: 'URGENT' as const,
+              energy: 'HIGH' as const,
+              dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+              estimatedMinutes: 240,
+              isRepeating: false,
+              columnId: defaultBoard.columns?.[0]?.id || 'default',
+              labels: ['work', 'project', 'deadline'],
+              isDemo: true,
+              aiGenerated: true
+            }
+          ]
+
+          let createdCount = 0
+          for (const demoTask of demoTasks) {
+            try {
+              await createTask(demoTask)
+              createdCount++
+            } catch (error) {
+              console.log('Demo task already exists or failed to create:', demoTask.title)
+            }
+          }
+
+          // Mark that we've added demo tasks permanently
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('demoTasksAdded', 'true')
+          }
+
+          // Refresh the boards to get the updated state
+          await get().fetchBoards()
+          
+          // Dispatch event to notify calendar that tasks have been updated
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('taskUpdated'))
+          }
+          
+          set({ isLoading: false })
+          toast.success(`Successfully added ${createdCount} demo tasks!`)
+        } catch (error) {
+          console.error('Failed to add demo tasks:', error)
+          set({ error: 'Failed to add demo tasks', isLoading: false })
+          toast.error('Failed to add demo tasks. Check console for details.')
         }
       }
     }),

@@ -39,6 +39,10 @@ const defaultSettings: UserSettings = {
     defaultPriority: 'MEDIUM',
     maxTodayTasks: 7,
     showSubtasks: true
+  },
+  demoTasks: {
+    enabled: false, // Demo tasks are OFF by default
+    autoCreate: false // Don't auto-create demo tasks
   }
 }
 
@@ -194,6 +198,18 @@ export const getTaskPreferences = () => {
 export const isDebugMode = () => {
   if (typeof window === 'undefined') return false // SSR safe
   return useSettingsStore.getState().debugMode || false
+}
+
+export const getDemoTaskSettings = () => {
+  return useSettingsStore.getState().demoTasks || defaultSettings.demoTasks
+}
+
+export const areDemoTasksEnabled = () => {
+  return getDemoTaskSettings().enabled || false
+}
+
+export const shouldAutoCreateDemoTasks = () => {
+  return getDemoTaskSettings().autoCreate || false
 }
 
 // Apply settings to DOM

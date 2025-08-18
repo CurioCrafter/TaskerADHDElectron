@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { useBoardStore } from '@/stores/board'
 import { useSettingsStore } from '@/stores/settings'
+import { areDemoTasksEnabled, shouldAutoCreateDemoTasks } from '@/stores/settings'
 import { AppLayout } from '@/components/layout/app-layout'
 import { TaskEditModal } from '@/components/ui/task-edit-modal'
 import { TaskForm } from '@/components/ui/task-form'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays, isToday, parseISO } from 'date-fns'
-import type { Task } from '@/types'
+import type { Task } from '@/types/task.types'
 
 // Example tasks to demonstrate different types and repeatable patterns
 const EXAMPLE_TASKS = [
@@ -20,7 +21,7 @@ const EXAMPLE_TASKS = [
     dueAt: new Date().toISOString(),
     estimateMin: 15,
     isRepeatable: true,
-    repeatPattern: 'daily' as const,
+    repeatPattern: 'DAILY' as const,
     repeatInterval: 1,
     boardName: 'Work',
     boardId: 'work-board'
@@ -33,7 +34,7 @@ const EXAMPLE_TASKS = [
     dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Next Monday
     estimateMin: 60,
     isRepeatable: true,
-    repeatPattern: 'weekly' as const,
+    repeatPattern: 'WEEKLY' as const,
     repeatInterval: 1,
     repeatDays: [1], // Monday
     boardName: 'Personal',
@@ -47,7 +48,7 @@ const EXAMPLE_TASKS = [
     dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Next month
     estimateMin: 45,
     isRepeatable: true,
-    repeatPattern: 'monthly' as const,
+    repeatPattern: 'MONTHLY' as const,
     repeatInterval: 1,
     boardName: 'Finance',
     boardId: 'finance-board'
@@ -60,7 +61,7 @@ const EXAMPLE_TASKS = [
     dueAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // This weekend
     estimateMin: 90,
     isRepeatable: true,
-    repeatPattern: 'weekly' as const,
+    repeatPattern: 'WEEKLY' as const,
     repeatInterval: 1,
     repeatDays: [0, 6], // Weekend
     boardName: 'Personal',
@@ -220,14 +221,39 @@ export default function CalendarPage() {
   // Add demo tasks to board store if no real tasks exist (only once)
   useEffect(() => {
     const addDemoTasksIfNeeded = async () => {
-      // Check if we've already added demo tasks this session
-      const demoTasksAdded = sessionStorage.getItem('demoTasksAdded')
-      if (demoTasksAdded === 'true') {
+      // Check if demo tasks are enabled in settings
+      if (!areDemoTasksEnabled()) {
+        console.log('🔧 [CALENDAR] Demo tasks are disabled in settings, skipping creation')
         return
       }
       
-      const realTasks = getAllTasksWithDates()
-      if (realTasks.length === 0 && boards && boards.length > 0) {
+      // Check if auto-creation is enabled
+      if (!shouldAutoCreateDemoTasks()) {
+        console.log('🔧 [CALENDAR] Demo task auto-creation is disabled in settings, skipping creation')
+        return
+      }
+      
+      // Check if we've already added demo tasks permanently (using localStorage)
+      const demoTasksAdded = localStorage.getItem('demoTasksAdded')
+      if (demoTasksAdded === 'true') {
+        console.log('🔧 [CALENDAR] Demo tasks already added previously, skipping creation')
+        return
+      }
+      
+      // Also check if demo tasks already exist in the database
+      const existingTasks = getAllTasksWithDates()
+      const hasDemoTasks = existingTasks.some(task => 
+        ['Daily Standup', 'Weekly Review', 'Monthly Budget Review', 'Grocery Shopping', 'Project Deadline'].includes(task.title)
+      )
+      
+      if (hasDemoTasks) {
+        // Demo tasks already exist, mark as added permanently
+        localStorage.setItem('demoTasksAdded', 'true')
+        console.log('🔧 [CALENDAR] Demo tasks already exist in database, marking as added')
+        return
+      }
+      
+      if (existingTasks.length === 0 && boards && boards.length > 0) {
         // Set the first board as current board for demo task creation
         const defaultBoard = boards[0]
         const { setCurrentBoard, createTask } = useBoardStore.getState()
@@ -240,12 +266,12 @@ export default function CalendarPage() {
           try {
             await createTask({
               title: exampleTask.title,
-              summary: exampleTask.summary,
+              description: exampleTask.summary,
               priority: exampleTask.priority,
               energy: exampleTask.energy,
-              dueAt: exampleTask.dueAt,
-              estimateMin: exampleTask.estimateMin,
-              isRepeatable: exampleTask.isRepeatable,
+              dueDate: exampleTask.dueAt,
+              estimatedMinutes: exampleTask.estimateMin,
+              isRepeating: exampleTask.isRepeatable,
               repeatPattern: exampleTask.repeatPattern,
               repeatInterval: exampleTask.repeatInterval,
               repeatDays: exampleTask.repeatDays,
@@ -257,10 +283,10 @@ export default function CalendarPage() {
           }
         }
         
-        // Mark that we've added demo tasks this session
+        // Mark that we've added demo tasks permanently
         if (createdCount > 0) {
-          sessionStorage.setItem('demoTasksAdded', 'true')
-          console.log(`🔧 [CALENDAR] Added ${createdCount} demo tasks`)
+          localStorage.setItem('demoTasksAdded', 'true')
+          console.log(`🔧 [CALENDAR] Added ${createdCount} demo tasks and marked as permanent`)
         }
       }
     }

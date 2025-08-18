@@ -135,7 +135,14 @@ When you first launch the app, **demo tasks are automatically created** to help 
 - **Energy Level Matching**: Tasks designed for different energy states
 - **Time Estimates & Labels**: Examples of task metadata
 
-These demo tasks appear in your **calendar**, **projects**, and **boards** to demonstrate the app's capabilities. You can **remove them anytime** from **Settings → Demo Tasks** when you're ready to use the app with your own tasks.
+These demo tasks appear in your **calendar**, **projects**, and **boards** to demonstrate the app's capabilities.
+
+**Demo Task Management** (Settings → Demo Tasks):
+- **🗑️ Remove All Demo Tasks**: Permanently delete all demo tasks from your workspace
+- **🔄 Reset Demo Tasks Flag**: Allow demo tasks to be recreated when you visit the calendar
+- **➕ Add Demo Tasks**: Manually add demo tasks to your first board
+
+**Note**: Demo tasks are only created once per app installation. Once removed, they won't automatically reappear unless you manually reset the flag or add them back.
 
 ### 🏗️ Building for Distribution
 

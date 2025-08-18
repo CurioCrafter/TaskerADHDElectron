@@ -14,11 +14,31 @@ interface TaskProposalModalProps {
   useStaging?: boolean
 }
 
+interface CreatedTaskSummary {
+  title: string
+  summary?: string
+  priority?: string
+  energy?: string
+  dueAt?: string
+  estimateMin?: number
+  labels: string[]
+  isRepeatable: boolean
+  repeatPattern?: string
+  repeatInterval?: number
+  repeatDays?: number[]
+  repeatEndDate?: string
+  repeatCount?: number
+  confidence?: number
+  source: string
+}
+
 export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useStaging = false }: TaskProposalModalProps) {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [editingTask, setEditingTask] = useState<string | null>(null)
   const [editedTasks, setEditedTasks] = useState<Map<string, Partial<TaskProposal>>>(new Map())
   const [isCreating, setIsCreating] = useState(false)
+  const [showSuccessSummary, setShowSuccessSummary] = useState(false)
+  const [createdTasks, setCreatedTasks] = useState<CreatedTaskSummary[]>([])
   
   const { currentBoard, createTask } = useBoardStore()
   const { addToStaging } = useStagingStore()
@@ -72,6 +92,7 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
 
     setIsCreating(true)
     let successCount = 0
+    const createdTaskSummaries: CreatedTaskSummary[] = []
 
     try {
       for (const task of selectedTasksArray) {
@@ -89,6 +110,26 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
               estimateMin: finalTask.estimateMin,
               isRepeatable: finalTask.isRepeatable || false
             })
+            
+            // Add to success summary
+            createdTaskSummaries.push({
+              title: finalTask.title,
+              summary: finalTask.summary,
+              priority: finalTask.priority,
+              energy: finalTask.energy,
+              dueAt: finalTask.dueAt,
+              estimateMin: finalTask.estimateMin,
+              labels: finalTask.labels || [],
+              isRepeatable: finalTask.isRepeatable || false,
+              repeatPattern: finalTask.repeatPattern,
+              repeatInterval: finalTask.repeatInterval,
+              repeatDays: finalTask.repeatDays,
+              repeatEndDate: finalTask.repeatEndDate,
+              repeatCount: finalTask.repeatCount,
+              confidence: finalTask.confidence,
+              source: 'board'
+            })
+            
             successCount++
           } else {
             // Send to staging when staging is ON or no board available
@@ -114,6 +155,26 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
               suggestedLabels: finalTask.labels || [],
               detectedCategory: 'work' // Default category
             })
+            
+            // Add to success summary
+            createdTaskSummaries.push({
+              title: finalTask.title,
+              summary: finalTask.summary,
+              priority: finalTask.priority,
+              energy: finalTask.energy,
+              dueAt: finalTask.dueAt,
+              estimateMin: finalTask.estimateMin,
+              labels: finalTask.labels || [],
+              isRepeatable: finalTask.isRepeatable || false,
+              repeatPattern: finalTask.repeatPattern,
+              repeatInterval: finalTask.repeatInterval,
+              repeatDays: finalTask.repeatDays,
+              repeatEndDate: finalTask.repeatEndDate,
+              repeatCount: finalTask.repeatCount,
+              confidence: finalTask.confidence,
+              source: 'staging'
+            })
+            
             successCount++
           }
         } catch (error) {
@@ -122,13 +183,15 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
       }
 
       if (successCount > 0) {
+        // Set the created tasks for the success summary
+        setCreatedTasks(createdTaskSummaries)
+        setShowSuccessSummary(true)
+        
         if (useStaging) {
           toast.success(`📥 Sent ${successCount} task${successCount > 1 ? 's' : ''} to staging for review!`)
-          toast('💡 Check the Staging area to review and approve your tasks', { duration: 4000 })
         } else {
           toast.success(`✅ Created ${successCount} task${successCount > 1 ? 's' : ''} directly on your board!`)
         }
-        onClose()
       } else {
         toast.error('Failed to create tasks')
       }
@@ -147,6 +210,20 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
 
   const handleSelectNone = () => {
     setSelectedTasks(new Set())
+  }
+
+  const handleCloseSuccessSummary = () => {
+    setShowSuccessSummary(false)
+    setCreatedTasks([])
+    onClose()
+  }
+
+  const handleCreateMoreTasks = () => {
+    setShowSuccessSummary(false)
+    setCreatedTasks([])
+    // Reset the form to allow creating more tasks
+    setSelectedTasks(new Set())
+    setEditedTasks(new Map())
   }
 
   const getConfidenceColor = (confidence: number) => {
@@ -172,6 +249,225 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
       case 'LOW': return 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-200'
       default: return 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
     }
+  }
+
+  // Success Summary Modal
+  if (showSuccessSummary) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                🎉 Tasks Created Successfully!
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Here's a summary of what was created from your voice input
+              </p>
+            </div>
+            <button
+              onClick={handleCloseSuccessSummary}
+              className="btn-ghost p-2"
+              aria-label="Close summary"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Original Input */}
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+              <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                🎤 Your Voice Input
+              </h3>
+              <p className="text-blue-800 dark:text-blue-200 italic">"{transcript}"</p>
+            </div>
+
+            {/* Created Tasks Summary */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                📋 Created Tasks ({createdTasks.length})
+              </h3>
+              
+              {createdTasks.map((task, index) => (
+                <div key={index} className="border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <h4 className="font-medium text-green-900 dark:text-green-100 text-lg">
+                      {index + 1}. {task.title}
+                    </h4>
+                    <span className={`text-sm px-2 py-1 rounded-full ${
+                      task.source === 'board' 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200'
+                        : 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200'
+                    }`}>
+                      {task.source === 'board' ? '✅ On Board' : '📥 In Staging'}
+                    </span>
+                  </div>
+
+                  {/* Description */}
+                  {task.summary && (
+                    <p className="text-green-800 dark:text-green-200 mb-3">
+                      {task.summary}
+                    </p>
+                  )}
+
+                  {/* Task Details Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    {/* Priority & Energy */}
+                    <div className="space-y-2">
+                      {task.priority && (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-green-800 dark:text-green-200">Priority:</span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${getPriorityColor(task.priority)}`}>
+                            {task.priority.toLowerCase()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {task.energy && (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-green-800 dark:text-green-200">Energy:</span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${getEnergyColor(task.energy)}`}>
+                            {task.energy === 'HIGH' && '🚀'}
+                            {task.energy === 'MEDIUM' && '⚡'}
+                            {task.energy === 'LOW' && '🌱'} {task.energy.toLowerCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Time & Date */}
+                    <div className="space-y-2">
+                      {task.estimateMin && (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-green-800 dark:text-green-200">Estimated Time:</span>
+                          <span className="text-sm text-green-700 dark:text-green-300">
+                            ⏱️ {task.estimateMin} minutes
+                          </span>
+                        </div>
+                      )}
+                      
+                      {task.dueAt && (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-green-800 dark:text-green-200">Due Date:</span>
+                          <span className="text-sm text-green-700 dark:text-green-300">
+                            📅 {new Date(task.dueAt).toLocaleDateString()} at {new Date(task.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Labels */}
+                  {task.labels && task.labels.length > 0 && (
+                    <div className="mb-3">
+                      <span className="text-sm font-medium text-green-800 dark:text-green-200 mr-2">Labels:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {task.labels.map((label, idx) => (
+                          <span
+                            key={idx}
+                            className="text-xs bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-1 rounded"
+                          >
+                            #{label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recurring Task Details */}
+                  {task.isRepeatable && (
+                    <div className="mt-3 p-3 bg-green-100 dark:bg-green-800/30 rounded-lg border border-green-200 dark:border-green-600">
+                      <h5 className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
+                        🔄 Recurring Task Details
+                      </h5>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-green-700 dark:text-green-300">
+                        {task.repeatPattern && (
+                          <div>
+                            <span className="font-medium">Pattern:</span> {task.repeatPattern}
+                            {task.repeatInterval && task.repeatInterval > 1 && ` every ${task.repeatInterval} ${task.repeatPattern === 'DAILY' ? 'days' : task.repeatPattern === 'WEEKLY' ? 'weeks' : task.repeatPattern === 'MONTHLY' ? 'months' : 'times'}`}
+                          </div>
+                        )}
+                        {task.repeatDays && task.repeatDays.length > 0 && (
+                          <div>
+                            <span className="font-medium">Days:</span> {task.repeatDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}
+                          </div>
+                        )}
+                        {task.repeatCount && (
+                          <div>
+                            <span className="font-medium">Occurrences:</span> {task.repeatCount} times
+                          </div>
+                        )}
+                        {task.repeatEndDate && (
+                          <div>
+                            <span className="font-medium">Ends:</span> {new Date(task.repeatEndDate).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Confidence */}
+                  {task.confidence && (
+                    <div className="mt-2 flex items-center space-x-2">
+                      <span className="text-sm font-medium text-green-800 dark:text-green-200">AI Confidence:</span>
+                      <span className={`text-sm px-2 py-1 rounded-full ${
+                        task.confidence >= 0.8 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200'
+                          : task.confidence >= 0.6
+                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200'
+                      }`}>
+                        {Math.round(task.confidence * 100)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Next Steps */}
+            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+              <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                🚀 Next Steps
+              </h3>
+              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                {createdTasks.some(t => t.source === 'board') && (
+                  <li>• Tasks created on your board are ready to work on</li>
+                )}
+                {createdTasks.some(t => t.source === 'staging') && (
+                  <li>• Tasks sent to staging need your review before going live</li>
+                )}
+                <li>• You can edit any task details directly on the board</li>
+                <li>• Set reminders and track progress as you work</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+            <div className="flex justify-between">
+              <button
+                onClick={handleCreateMoreTasks}
+                className="btn-secondary"
+              >
+                ➕ Create More Tasks
+              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleCloseSuccessSummary}
+                  className="btn-primary"
+                >
+                  ✅ Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -422,6 +718,34 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
                             🔄 Repeatable
                           </span>
                         )}
+
+                        {/* Repeat Pattern Details */}
+                        {finalTask.isRepeatable && finalTask.repeatPattern && (
+                          <span className="text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
+                            📅 {finalTask.repeatPattern} {finalTask.repeatInterval && finalTask.repeatInterval > 1 ? `every ${finalTask.repeatInterval} ${finalTask.repeatPattern === 'daily' ? 'days' : finalTask.repeatPattern === 'weekly' ? 'weeks' : finalTask.repeatPattern === 'monthly' ? 'months' : 'times'}` : ''}
+                          </span>
+                        )}
+
+                        {/* Repeat Days */}
+                        {finalTask.isRepeatable && finalTask.repeatDays && finalTask.repeatDays.length > 0 && (
+                          <span className="text-xs bg-indigo-100 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-200 px-2 py-1 rounded">
+                            📆 {finalTask.repeatDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}
+                          </span>
+                        )}
+
+                        {/* Repeat Count */}
+                        {finalTask.isRepeatable && finalTask.repeatCount && (
+                          <span className="text-xs bg-teal-100 dark:bg-teal-900/20 text-teal-800 dark:text-teal-200 px-2 py-1 rounded">
+                            🔢 {finalTask.repeatCount} times
+                          </span>
+                        )}
+
+                        {/* Repeat End Date */}
+                        {finalTask.isRepeatable && finalTask.repeatEndDate && (
+                          <span className="text-xs bg-orange-100 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 px-2 py-1 rounded">
+                            🎯 Until {new Date(finalTask.repeatEndDate).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
 
                       {/* Labels */}
@@ -435,6 +759,43 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
                               #{label}
                             </span>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Detailed Repeatable Information */}
+                      {finalTask.isRepeatable && (
+                        <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <h5 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            🔄 Recurring Task Details
+                          </h5>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                            {finalTask.repeatPattern && (
+                              <div>
+                                <span className="font-medium">Pattern:</span> {finalTask.repeatPattern}
+                                {finalTask.repeatInterval && finalTask.repeatInterval > 1 && ` every ${finalTask.repeatInterval} ${finalTask.repeatPattern === 'daily' ? 'days' : finalTask.repeatPattern === 'weekly' ? 'weeks' : finalTask.repeatPattern === 'monthly' ? 'months' : 'times'}`}
+                              </div>
+                            )}
+                            {finalTask.repeatDays && finalTask.repeatDays.length > 0 && (
+                              <div>
+                                <span className="font-medium">Days:</span> {finalTask.repeatDays.map(day => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ')}
+                              </div>
+                            )}
+                            {finalTask.repeatCount && (
+                              <div>
+                                <span className="font-medium">Occurrences:</span> {finalTask.repeatCount} times
+                              </div>
+                            )}
+                            {finalTask.repeatEndDate && (
+                              <div>
+                                <span className="font-medium">Ends:</span> {new Date(finalTask.repeatEndDate).toLocaleDateString()}
+                              </div>
+                            )}
+                            {finalTask.dueAt && (
+                              <div>
+                                <span className="font-medium">Next Due:</span> {new Date(finalTask.dueAt).toLocaleDateString()} at {new Date(finalTask.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 

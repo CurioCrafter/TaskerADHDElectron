@@ -178,7 +178,7 @@ export function EnergyDashboard({ className = '', showFullStats = false }: Energ
           )}
         </h3>
         <div className="text-sm text-gray-500 dark:text-gray-400">
-          {timeOfDay} • {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {timeOfDay} • {typeof window !== 'undefined' ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
         </div>
       </div>
 

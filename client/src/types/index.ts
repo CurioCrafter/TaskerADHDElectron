@@ -26,6 +26,10 @@ export interface UserSettings {
     maxTodayTasks?: number
     showSubtasks?: boolean
   }
+  demoTasks?: {
+    enabled?: boolean // Whether demo tasks are automatically generated
+    autoCreate?: boolean // Whether to auto-create demo tasks on first visit
+  }
 }
 
 // Board and task types

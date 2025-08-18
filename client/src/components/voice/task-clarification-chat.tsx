@@ -59,7 +59,7 @@ export function TaskClarificationChat({
         {
           id: 'ai-intro',
           type: 'ai',
-          content: `I need more details to create a perfectly formatted task for: "${originalTranscript}". Please answer these questions:`,
+          content: `Let's create a perfectly formatted task from: "${originalTranscript}"! I'll ask you some questions to get all the details right:`,
           timestamp: new Date()
         },
         ...aiMessages

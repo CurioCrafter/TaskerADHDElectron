@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useDrag } from 'react-dnd'
-import type { Task } from '@/types'
+import type { Task } from '@/types/task.types'
 import { clsx } from 'clsx'
 import { useBoardStore } from '@/stores/board'
 import { toast } from 'react-hot-toast'
@@ -92,7 +92,7 @@ export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
             >
               ✏️
             </button>
-            {task.isRepeatable && (
+            {task.isRepeating && (
               <span className="text-xs text-blue-500" title="Repeating task">
                 🔄
               </span>
@@ -109,9 +109,9 @@ export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
         </div>
       </div>
 
-      {task.summary && (
+      {task.description && (
         <p className="text-xs text-gray-600 dark:text-gray-300 mb-2 break-anywhere">
-          {task.summary}
+          {task.description}
         </p>
       )}
 
@@ -128,16 +128,16 @@ export function TaskCard({ task, sourceColumnId }: TaskCardProps) {
             {task.energy === 'LOW' && '🌱'} {task.energy.toLowerCase()}
           </span>
         )}
-        {task.estimateMin && (
-          <span className="text-gray-500 dark:text-gray-400">{task.estimateMin}m</span>
+        {task.estimatedMinutes && (
+          <span className="text-gray-500 dark:text-gray-400">{task.estimatedMinutes}m</span>
         )}
       </div>
 
       {task.labels && task.labels.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
-          {task.labels.slice(0, 2).map((label) => (
-            <span key={label.label.name} className="text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200 px-2 py-1 rounded">
-              {label.label.name}
+          {task.labels.slice(0, 2).map((label, index) => (
+            <span key={index} className="text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-200 px-2 py-1 rounded">
+              {label}
             </span>
           ))}
           {task.labels.length > 2 && (

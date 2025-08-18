@@ -15,6 +15,14 @@ export interface TaskProposal {
   confidence: number // 0-1 confidence in the proposal
   reasoning?: string // Why the LLM made these choices
   isRepeatable?: boolean // Whether this is a recurring task
+  // Repeatable task fields
+  repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+  repeatInterval?: number
+  repeatDays?: number[]
+  repeatEndDate?: string
+  repeatCount?: number
+  parentTaskId?: string
+  nextDueDate?: string
 }
 
 export interface TaskShapingResult {

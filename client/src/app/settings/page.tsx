@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { useTheme } from '@/components/providers'
 import { useSettingsStore } from '@/stores/settings'
+import { useBoardStore } from '@/stores/board'
 import { AppLayout } from '@/components/layout/app-layout'
 
 
@@ -319,12 +320,12 @@ export default function SettingsPage() {
                         <optgroup label="Common Timezones">
                           {commonTimezones.map(tz => (
                             <option key={tz} value={tz}>
-                              {tz.replace('_', ' ')} - {new Date().toLocaleTimeString('en-US', { 
+                              {tz.replace('_', ' ')} - {typeof window !== 'undefined' ? new Date().toLocaleTimeString('en-US', { 
                                 timeZone: tz, 
                                 hour: '2-digit', 
                                 minute: '2-digit',
                                 hour12: false 
-                              })}
+                              }) : '--:--'}
                             </option>
                           ))}
                         </optgroup>
@@ -536,6 +537,53 @@ export default function SettingsPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">🧪 Demo Tasks</h2>
             <div className="space-y-4">
+              {/* Demo Task Settings */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">Demo Task Settings</h3>
+                <div className="space-y-3">
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.demoTasks?.enabled || false}
+                      onChange={(e) => updateSettings({
+                        demoTasks: {
+                          ...settings.demoTasks,
+                          enabled: e.target.checked
+                        }
+                      })}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Enable Demo Tasks
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 ml-7">
+                    When enabled, demo tasks can be created to help you learn the app features.
+                  </p>
+                  
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.demoTasks?.autoCreate || false}
+                      onChange={(e) => updateSettings({
+                        demoTasks: {
+                          ...settings.demoTasks,
+                          autoCreate: e.target.checked
+                        }
+                      })}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      disabled={!settings.demoTasks?.enabled}
+                    />
+                    <span className={`text-sm font-medium ${settings.demoTasks?.enabled ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>
+                      Auto-Create Demo Tasks
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 ml-7">
+                    Automatically create demo tasks when you first visit the calendar (requires demo tasks to be enabled).
+                  </p>
+                </div>
+              </div>
+              
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
                   Demo tasks are automatically created when you first use the app to help you understand how different features work, including repeatable tasks, priorities, and energy levels.
@@ -543,23 +591,51 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Once you're comfortable with the app, you can remove these demo tasks to clean up your workspace.
                 </p>
-                <button
-                  onClick={async () => {
-                    if (confirm('This will permanently delete all demo tasks. This action cannot be undone. Continue?')) {
-                      try {
-                        const { purgeDemoTasks } = await import('@/stores/board')
-                        await purgeDemoTasks()
-                        toast.success('Demo tasks removed successfully!')
-                      } catch (error) {
-                        console.error('Failed to purge demo tasks:', error)
-                        toast.error('Failed to remove demo tasks')
+                <div className="flex space-x-3">
+                  <button
+                    onClick={async () => {
+                      if (confirm('This will permanently delete all demo tasks. This action cannot be undone. Continue?')) {
+                        try {
+                          await useBoardStore.getState().purgeDemoTasks()
+                        } catch (error) {
+                          console.error('Failed to purge demo tasks:', error)
+                          toast.error('Failed to remove demo tasks')
+                        }
                       }
-                    }
-                  }}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors"
-                >
-                  🗑️ Remove All Demo Tasks
-                </button>
+                    }}
+                    className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors"
+                  >
+                    🗑️ Remove All Demo Tasks
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (confirm('This will allow demo tasks to be created again when you visit the calendar. Continue?')) {
+                        localStorage.removeItem('demoTasksAdded')
+                        toast.success('Demo tasks can now be recreated! Visit the calendar to see them.')
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+                  >
+                    🔄 Reset Demo Tasks Flag
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      if (confirm('This will add demo tasks to your first board. Continue?')) {
+                        try {
+                          await useBoardStore.getState().addDemoTasks()
+                        } catch (error) {
+                          console.error('Failed to add demo tasks:', error)
+                          toast.error('Failed to add demo tasks')
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors"
+                  >
+                    ➕ Add Demo Tasks
+                  </button>
+                </div>
               </div>
             </div>
           </section>

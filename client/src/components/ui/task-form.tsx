@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
-import { EnergyLevel, TaskPriority } from '@/types'
+import { EnergyLevel, TaskPriority } from '@/types/task.types'
 import { clsx } from 'clsx'
 
 interface TaskFormProps {
@@ -10,19 +10,24 @@ interface TaskFormProps {
 	onClose: () => void
 	onSubmit: (task: {
 		title: string
-		summary?: string
+		description?: string
 		priority?: TaskPriority
 		energy?: EnergyLevel
-		dueAt?: string
-		estimateMin?: number
+		dueDate?: string | Date
+		estimatedMinutes?: number
 		labels?: string[]
 		// Repeat data
-		isRepeatable?: boolean
-		repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+		isRepeating?: boolean
+		repeatPattern?: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM'
 		repeatInterval?: number
 		repeatDays?: number[]
-		repeatEndDate?: string
+		repeatEndDate?: string | Date
 		repeatCount?: number
+		// Voice/AI fields
+		confidence?: number
+		sourceTranscript?: string
+		aiGenerated?: boolean
+		isDemo?: boolean
 	}) => void
 	isLoading?: boolean
 	boardId?: string
@@ -31,7 +36,7 @@ interface TaskFormProps {
 
 export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId, initialDueDate }: TaskFormProps) {
 	const [title, setTitle] = useState('')
-	const [summary, setSummary] = useState('')
+	const [description, setDescription] = useState('')
 	const [priority, setPriority] = useState<TaskPriority | ''>('')
 	
 	// Reset form when modal closes
@@ -39,14 +44,14 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 		if (!isOpen) {
 			// Reset all form fields when modal closes
 			setTitle('')
-			setSummary('')
+			setDescription('')
 			setPriority('')
 			setEnergy('')
 			setDueAt('')
 			setEstimateMin('')
 			setLabels('')
-			setIsRepeatable(false)
-			setRepeatPattern('daily')
+			setIsRepeating(false)
+			setRepeatPattern('DAILY')
 			setRepeatInterval('')
 			setRepeatDays([])
 			setRepeatEndDate('')
@@ -66,8 +71,8 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 	const [labels, setLabels] = useState('')
 	
 	// Repeat functionality state
-	const [isRepeatable, setIsRepeatable] = useState(false)
-	const [repeatPattern, setRepeatPattern] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily')
+	const [isRepeating, setIsRepeating] = useState(false)
+	const [repeatPattern, setRepeatPattern] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM'>('DAILY')
 	const [repeatInterval, setRepeatInterval] = useState('1')
 	const [repeatDays, setRepeatDays] = useState<number[]>([])
 	const [repeatEndDate, setRepeatEndDate] = useState('')
@@ -77,14 +82,14 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 	useEffect(() => {
 		if (!isOpen) {
 			setTitle('')
-			setSummary('')
+			setDescription('')
 			setPriority('')
 			setEnergy('')
 			setDueAt('')
 			setEstimateMin('')
 			setLabels('')
-			setIsRepeatable(false)
-			setRepeatPattern('daily')
+			setIsRepeating(false)
+			setRepeatPattern('DAILY')
 			setRepeatInterval('1')
 			setRepeatDays([])
 			setRepeatEndDate('')
@@ -119,7 +124,7 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 
 		// Convert repeat end date to ISO string
 		let repeatEndIso: string | undefined
-		if (repeatEndDate && isRepeatable) {
+		if (repeatEndDate && isRepeating) {
 			const endDate = new Date(repeatEndDate)
 			endDate.setHours(23, 59, 59, 999)
 			repeatEndIso = endDate.toISOString()
@@ -127,23 +132,23 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 
 		onSubmit({
 			title: title.trim(),
-			summary: summary.trim() || undefined,
+			description: description.trim() || undefined,
 			priority: priority || undefined,
 			energy: energy || undefined,
-			dueAt: dueIso,
-			estimateMin: estimateMin ? parseInt(estimateMin) : undefined,
+			dueDate: dueIso,
+			estimatedMinutes: estimateMin ? parseInt(estimateMin) : undefined,
 			labels: labels
 				.split(',')
 				.map(l => l.trim())
 				.filter(Boolean),
 			
 			// Repeat data
-			isRepeatable,
-			repeatPattern: isRepeatable ? repeatPattern : undefined,
-			repeatInterval: isRepeatable && repeatInterval ? parseInt(repeatInterval) : undefined,
-			repeatDays: isRepeatable && repeatPattern === 'weekly' && repeatDays.length > 0 ? repeatDays : undefined,
+			isRepeating,
+			repeatPattern: isRepeating ? repeatPattern : undefined,
+			repeatInterval: isRepeating && repeatInterval ? parseInt(repeatInterval) : undefined,
+			repeatDays: isRepeating && repeatPattern === 'WEEKLY' && repeatDays.length > 0 ? repeatDays : undefined,
 			repeatEndDate: repeatEndIso,
-			repeatCount: isRepeatable && repeatCount ? parseInt(repeatCount) : undefined
+			repeatCount: isRepeating && repeatCount ? parseInt(repeatCount) : undefined
 		})
 	}
 
@@ -184,13 +189,13 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 						</div>
 
 						<div>
-							<label htmlFor="summary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+							<label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
 								Description
 							</label>
 							<textarea
-								id="summary"
-								value={summary}
-								onChange={(e) => setSummary(e.target.value)}
+								id="description"
+								value={description}
+								onChange={(e) => setDescription(e.target.value)}
 								className="input w-full h-20 resize-none"
 								placeholder="Add more details (optional)"
 							/>
@@ -282,18 +287,18 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 						<div className="border-t border-gray-200 dark:border-gray-700 pt-4">
 							<div className="flex items-center space-x-2 mb-4">
 								<input
-									id="isRepeatable"
+									id="isRepeating"
 									type="checkbox"
-									checked={isRepeatable}
-									onChange={(e) => setIsRepeatable(e.target.checked)}
+									checked={isRepeating}
+									onChange={(e) => setIsRepeating(e.target.checked)}
 									className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
 								/>
-								<label htmlFor="isRepeatable" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+								<label htmlFor="isRepeating" className="text-sm font-medium text-gray-700 dark:text-gray-300">
 									🔄 Make this a repeating task
 								</label>
 							</div>
 
-							{isRepeatable && (
+							{isRepeating && (
 								<div className="space-y-4 bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
 									<div>
 										<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -304,10 +309,10 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 											onChange={(e) => setRepeatPattern(e.target.value as any)}
 											className="input w-full"
 										>
-											<option value="daily">Daily</option>
-											<option value="weekly">Weekly</option>
-											<option value="monthly">Monthly</option>
-											<option value="custom">Custom</option>
+											<option value="DAILY">Daily</option>
+											<option value="WEEKLY">Weekly</option>
+											<option value="MONTHLY">Monthly</option>
+											<option value="CUSTOM">Custom</option>
 										</select>
 									</div>
 
@@ -327,14 +332,14 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 										</div>
 										<div className="flex items-end">
 											<span className="text-sm text-gray-600 dark:text-gray-400 pb-2">
-												{repeatPattern === 'daily' ? 'day(s)' : 
-												 repeatPattern === 'weekly' ? 'week(s)' : 
-												 repeatPattern === 'monthly' ? 'month(s)' : 'day(s)'}
+												{repeatPattern === 'DAILY' ? 'day(s)' : 
+												 repeatPattern === 'WEEKLY' ? 'week(s)' : 
+												 repeatPattern === 'MONTHLY' ? 'month(s)' : 'day(s)'}
 											</span>
 										</div>
 									</div>
 
-									{repeatPattern === 'weekly' && (
+									{repeatPattern === 'WEEKLY' && (
 										<div>
 											<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
 												Repeat on
