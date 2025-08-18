@@ -101,7 +101,8 @@ export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
           confidence: 0.85, // AI-generated tasks have high confidence
           suggestedImprovements: [],
           relatedTasks: [],
-          suggestedLabels: args.labels || []
+          suggestedLabels: args.labels || [],
+          detectedCategory: 'work' // Default category
         })
 
         toast.success(`📥 Task "${args.title}" sent to staging for review!`)
@@ -132,7 +133,8 @@ export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
         const results = []
         
         // Send all tasks to staging for intelligent processing
-        for (const [index, taskData] of args.tasks.entries()) {
+        for (let index = 0; index < args.tasks.length; index++) {
+          const taskData = args.tasks[index]
           console.log(`🔧 Staging task ${index + 1}/${args.tasks.length}: ${taskData.title}`)
           
           try {
@@ -154,7 +156,8 @@ export function OpenAIChat({ isOpen, onClose }: OpenAIChatProps) {
               confidence: 0.85, // AI-generated tasks have high confidence
               suggestedImprovements: [],
               relatedTasks: [],
-              suggestedLabels: taskData.labels || []
+              suggestedLabels: taskData.labels || [],
+              detectedCategory: 'work' // Default category
             })
             
             console.log(`✅ Task staged: ${taskData.title}`)

@@ -47,7 +47,7 @@ export function TaskForm({ isOpen, onClose, onSubmit, isLoading = false, boardId
 			setIsRepeatable(false)
 			setRepeatPattern('daily')
 			setRepeatInterval('')
-			setRepeatDays('')
+			setRepeatDays([])
 			setRepeatEndDate('')
 			setRepeatCount('')
 		}

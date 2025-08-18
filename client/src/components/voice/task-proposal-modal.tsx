@@ -103,7 +103,8 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
               confidence: finalTask.confidence || 0.8,
               suggestedImprovements: [],
               relatedTasks: [],
-              suggestedLabels: finalTask.labels || []
+              suggestedLabels: finalTask.labels || [],
+              detectedCategory: 'work' // Default category
             })
             successCount++
           }

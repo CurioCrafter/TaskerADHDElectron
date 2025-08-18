@@ -312,6 +312,19 @@ export const useBoardStore = create<BoardState>()(
             console.log('🔄 [STORE] Refreshing board to show new task...')
             await get().fetchBoard(currentBoard.id)
             console.log('🔄 [STORE] Board refresh completed')
+            
+            // Dispatch event to notify calendar that tasks have been updated
+            // This ensures recurring task instances are regenerated
+            if (typeof window !== 'undefined') {
+              console.log('🔧 [BOARD] Dispatching taskUpdated event for calendar refresh after creation')
+              try {
+                window.dispatchEvent(new Event('taskUpdated'))
+                console.log('✅ [BOARD] Task creation event dispatched successfully')
+              } catch (error) {
+                console.error('❌ [BOARD] Failed to dispatch task creation event:', error)
+              }
+            }
+            
             set({ isLoading: false })
             
             return data.task
@@ -335,8 +348,8 @@ export const useBoardStore = create<BoardState>()(
         } catch (error) {
           console.error('❌ [STORE] Task creation network error:', error)
           console.error('❌ [STORE] Error details:', {
-            message: error?.message,
-            stack: error?.stack,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
             taskData,
             boardId: currentBoard?.id
           })
@@ -397,6 +410,19 @@ export const useBoardStore = create<BoardState>()(
             if (currentBoard) {
               await get().fetchBoard(currentBoard.id)
             }
+            
+            // Dispatch event to notify calendar that tasks have been updated
+            // This ensures recurring task instances are regenerated
+            if (typeof window !== 'undefined') {
+              console.log('🔧 [BOARD] Dispatching taskUpdated event for calendar refresh')
+              try {
+                window.dispatchEvent(new Event('taskUpdated'))
+                console.log('✅ [BOARD] Task update event dispatched successfully')
+              } catch (error) {
+                console.error('❌ [BOARD] Failed to dispatch task update event:', error)
+              }
+            }
+            
             set({ isLoading: false })
           } else {
             let errText = 'Failed to update task'
@@ -434,6 +460,19 @@ export const useBoardStore = create<BoardState>()(
             if (currentBoard) {
               await get().fetchBoard(currentBoard.id)
             }
+            
+            // Dispatch event to notify calendar that tasks have been updated
+            // This ensures recurring task instances are regenerated
+            if (typeof window !== 'undefined') {
+              console.log('🔧 [BOARD] Dispatching taskUpdated event for calendar refresh after deletion')
+              try {
+                window.dispatchEvent(new Event('taskUpdated'))
+                console.log('✅ [BOARD] Task deletion event dispatched successfully')
+              } catch (error) {
+                console.error('❌ [BOARD] Failed to dispatch task deletion event:', error)
+              }
+            }
+            
             set({ isLoading: false })
           } else {
             let errText = 'Failed to delete task'

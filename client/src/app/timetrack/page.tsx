@@ -18,6 +18,7 @@ interface TimeEntry {
   id: string
   taskId: string
   taskTitle: string
+  boardId: string
   boardName: string
   startTime: Date
   endTime?: Date

@@ -167,7 +167,7 @@ export function TimeEntryEditor({ entry, onClose }: TimeEntryEditorProps) {
               </label>
               <select
                 value={formData.energy}
-                onChange={(e) => setFormData({ ...formData, energy: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, energy: e.target.value as 'LOW' | 'MEDIUM' | 'HIGH' })}
                 className="input w-full"
               >
                 <option value="LOW">🟡 Low Energy</option>

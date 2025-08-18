@@ -17,6 +17,7 @@ import { DebugToggle } from '@/components/debug-toggle'
 import { TimerWidget, useTimerWidget } from '@/components/time-tracking/timer-widget'
 import { toast } from 'react-hot-toast'
 import { Column as KanbanColumn } from '@/components/kanban/Column'
+import type { TaskPriority, EnergyLevel } from '@/types'
 
 // Force dynamic rendering to avoid prerendering with useSearchParams
 export const dynamic = 'force-dynamic'
@@ -138,7 +139,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Task creation error:', error)
-      toast.error(`Failed to create task: ${error?.message || error}`)
+      toast.error(`Failed to create task: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsCreatingTask(false)
     }
@@ -177,7 +178,6 @@ export default function DashboardPage() {
             return isDueToday || isUrgent || isInProgress
           } catch (dateError) {
             console.error('🚨 Error processing task date:', dateError, { task })
-            handleError(dateError as Error, 'getTodaysTasks date processing')
             return false
           }
         })
@@ -187,7 +187,6 @@ export default function DashboardPage() {
       return tasks
     } catch (error) {
       console.error('🚨 Error in getTodaysTasks:', error)
-      handleError(error as Error, 'getTodaysTasks')
       return []
     }
   }
@@ -218,7 +217,6 @@ export default function DashboardPage() {
             return task.energy === 'LOW' && (task.estimateMin || 0) <= 30
           } catch (taskError) {
             console.error('🚨 Error processing quick win task:', taskError, { task })
-            handleError(taskError as Error, 'getQuickWins task processing')
             return false
           }
         })
@@ -228,7 +226,6 @@ export default function DashboardPage() {
       return quickWins
     } catch (error) {
       console.error('🚨 Error in getQuickWins:', error)
-      handleError(error as Error, 'getQuickWins')
       return []
     }
   }

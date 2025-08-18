@@ -1,9 +1,20 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter, usePathname } from 'next/navigation'
 import { useBoardStore } from '@/stores/board'
+import { useSettingsStore } from '@/stores/settings'
+import { useAuthStore } from '@/stores/auth'
+
+// Extend Window interface for Electron API
+declare global {
+  interface Window {
+    electronAPI?: {
+      shutdown?: () => Promise<void>
+    }
+  }
+}
 
 interface SidebarProps {
   className?: string

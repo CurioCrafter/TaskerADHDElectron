@@ -253,12 +253,12 @@ export default function SettingsPage() {
                     min={0.1}
                     max={0.9}
                     step={0.05}
-                    defaultValue={settings.voiceSettings.aiClarifyThreshold ?? 0.4}
+                    defaultValue={settings.voiceSettings?.aiClarifyThreshold ?? 0.4}
                     onChange={(e) => settings.setVoiceSettings({ aiClarifyThreshold: Number(e.target.value) })}
                     className="w-64"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300 w-14">
-                    {(settings.voiceSettings.aiClarifyThreshold ?? 0.4).toFixed(2)}
+                    {(settings.voiceSettings?.aiClarifyThreshold ?? 0.4).toFixed(2)}
                   </span>
                   <button
                     className="btn-ghost btn-sm"

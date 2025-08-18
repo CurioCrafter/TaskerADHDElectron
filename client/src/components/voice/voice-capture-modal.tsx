@@ -84,6 +84,14 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
     const handleKeyPress = (e: KeyboardEvent) => {
       if (!isOpen) return
       
+      // Disable voice capture when clarification chat is open
+      if (showClarificationChat) {
+        if (e.code === 'Escape') {
+          handleClose()
+        }
+        return
+      }
+      
       if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && isActuallyInitialized) {
         e.preventDefault()
         if (isRecording) {
@@ -98,7 +106,7 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
 
     document.addEventListener('keydown', handleKeyPress)
     return () => document.removeEventListener('keydown', handleKeyPress)
-  }, [isOpen, isRecording, isActuallyInitialized])
+  }, [isOpen, isRecording, isActuallyInitialized, showClarificationChat])
 
   const initializeServices = async () => {
     try {
@@ -623,87 +631,13 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
-                        // Always open clarification chat for any input
-                        console.log('🔧 [VOICE] User requested clarification for:', transcript)
-                        const questions = [
-                          'What specific time do you want this to happen?',
-                          'Which day(s) of the week?',
-                          'How often should this repeat?',
-                          'Where should this happen?',
-                          'Any other specific details?'
-                        ]
-                        setClarificationQuestions(questions)
                         setShowClarificationChat(true)
-                        toast.success('🤔 Let\'s get more details about your request!')
-                      }}
-                      disabled={!transcript || transcript.trim().length < 5}
-                      className="btn-secondary flex items-center space-x-2"
-                      title="Ask clarifying questions about your request"
-                    >
-                      <span>❓</span>
-                      <span>Ask for Details</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        // Simple test to see if clarification chat works
-                        console.log('🧪 Testing clarification chat...')
-                        setClarificationQuestions([
-                          'What time do you want to eat pizza?',
-                          'Which day of the week?',
-                          'Which restaurant?'
-                        ])
-                        setShowClarificationChat(true)
-                        toast.success('🧪 Test: Opening clarification chat!')
+                        toast.success('Opening clarification chat!')
                       }}
                       className="btn-ghost flex items-center space-x-2 text-xs"
-                      title="Test the clarification chat component"
+                      title="Ask for more details about this task"
                     >
-                      🧪 Test Chat
-                    </button>
-                    <button
-                      onClick={async () => {
-                        // Debug: Test AI processing with a specific input
-                        console.log('🧪 Testing AI processing...')
-                        const openaiKey = localStorage.getItem('openai_api_key')
-                        if (!openaiKey) {
-                          toast.error('OpenAI API key required')
-                          return
-                        }
-                        
-                        setIsShaping(true)
-                        try {
-                          const cal = new VoiceCalendarIntegration(openaiKey)
-                          const testInput = 'I want to eat pizza every weekend at 6pm'
-                          console.log('🧪 Testing with input:', testInput)
-                          
-                          const result = await cal.processVoiceInput(testInput, 0.1)
-                          console.log('🧪 AI result:', JSON.stringify(result, null, 2))
-                          
-                          // Show the result in a toast
-                          toast.success(`AI returned: ${result.intent}, ${result.tasks?.length || 0} tasks, ${result.calendarEvents?.length || 0} events`)
-                          
-                          // If it's a repeatable task, show the details
-                          if (result.tasks?.[0]?.isRepeatable) {
-                            const task = result.tasks[0]
-                            console.log('🧪 Repeatable task details:', {
-                              isRepeatable: task.isRepeatable,
-                              repeatPattern: task.repeatPattern,
-                              repeatInterval: task.repeatInterval,
-                              repeatDays: task.repeatDays,
-                              repeatCount: task.repeatCount
-                            })
-                          }
-                        } catch (error) {
-                          console.error('🧪 AI test failed:', error)
-                          toast.error('AI test failed')
-                        } finally {
-                          setIsShaping(false)
-                        }
-                      }}
-                      className="btn-ghost flex items-center space-x-2 text-xs"
-                      title="Test AI processing with a specific input"
-                    >
-                      🧪 Test AI
+                      ❓ Ask for Details
                     </button>
                     <button
                       onClick={handleShapeIntoTasks}

@@ -33,6 +33,11 @@ interface StagedTask extends Omit<Task, 'columnId' | 'boardId'> {
   suggestedLabels: string[]
 }
 
+// Input interface for addToStaging that allows string labels
+interface StagingInputTask extends Omit<StagedTask, 'id' | 'stagedAt' | 'processed' | 'labels'> {
+  labels?: string[] // Allow string labels for input
+}
+
 interface StagingStats {
   total: number
   highConfidence: number
@@ -54,7 +59,7 @@ interface StagingState {
   confidenceThreshold: number
   
   // Actions
-  addToStaging: (task: Omit<StagedTask, 'id' | 'stagedAt' | 'processed'> & { id?: string }) => void
+  addToStaging: (task: StagingInputTask & { id?: string }) => void
   removeFromStaging: (taskId: string) => void
   updateStagedTask: (taskId: string, updates: Partial<StagedTask>) => void
   processToBoard: (taskId: string, boardId: string) => Promise<boolean>
@@ -97,70 +102,73 @@ export const useStagingStore = create<StagingState>()(
           }
           
           const newTask: StagedTask = {
-          id: task.id || `staged_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          title: task.title,
-          summary: task.summary || '',
-          priority: task.priority,
-          energy: task.energy,
-          estimateMin: task.estimateMin,
-          dueAt: task.dueAt,
-          labels: (task.labels || []).map(labelName => ({
-            taskId: '', // Will be set when task is created
-            labelId: `temp_${Math.random().toString(36).substr(2, 9)}`,
-            label: {
-              id: `temp_${Math.random().toString(36).substr(2, 9)}`,
-              name: labelName,
-              color: undefined
-            }
-          })),
-          subtasks: task.subtasks || [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          position: 0,
-          
-          // Staging specific
-          source: task.source,
-          confidence: task.confidence,
-          stagedAt: new Date().toISOString(),
-          processed: false,
-          suggestedImprovements: task.suggestedImprovements || [],
-          detectedCategory: get().categorizeTask(task as StagedTask),
-          duplicateOf: undefined,
-          relatedTasks: task.relatedTasks || [],
-          predictedDuration: task.predictedDuration,
-          suggestedEnergy: task.suggestedEnergy,
-          suggestedPriority: task.suggestedPriority,
-          suggestedDueDate: task.suggestedDueDate,
-          suggestedLabels: task.suggestedLabels || []
-        }
-
-        // Check for duplicates if enabled
-        if (state.duplicateDetection) {
-          const duplicates = get().findDuplicates(newTask)
-          if (duplicates.length > 0) {
-            newTask.duplicateOf = duplicates[0]
-            newTask.suggestedImprovements.push({
-              type: 'similar_task',
-              message: `Similar to existing task: "${state.stagedTasks.find(t => t.id === duplicates[0])?.title}"`,
-              suggestion: 'Consider merging or adjusting to avoid duplication',
-              autoFix: false
-            })
+            id: task.id || `staged_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            title: task.title,
+            summary: task.summary || '',
+            priority: task.priority,
+            energy: task.energy,
+            estimateMin: task.estimateMin,
+            dueAt: task.dueAt,
+            labels: (task.labels || []).map(labelName => ({
+              taskId: '', // Will be set when task is created
+              labelId: `temp_${Math.random().toString(36).substr(2, 9)}`,
+              label: {
+                id: `temp_${Math.random().toString(36).substr(2, 9)}`,
+                name: labelName,
+                color: undefined
+              }
+            })),
+            subtasks: task.subtasks || [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            position: 0,
+            
+            // Staging specific
+            source: task.source,
+            confidence: task.confidence,
+            stagedAt: new Date().toISOString(),
+            processed: false,
+            suggestedImprovements: task.suggestedImprovements || [],
+            detectedCategory: 'work', // Default category, will be updated below
+            duplicateOf: undefined,
+            relatedTasks: task.relatedTasks || [],
+            predictedDuration: task.predictedDuration,
+            suggestedEnergy: task.suggestedEnergy,
+            suggestedPriority: task.suggestedPriority,
+            suggestedDueDate: task.suggestedDueDate,
+            suggestedLabels: task.suggestedLabels || []
           }
-        }
 
-        set({ 
-          stagedTasks: [...state.stagedTasks, newTask] 
-        })
+          // Now we can safely call categorizeTask
+          newTask.detectedCategory = get().categorizeTask(newTask)
 
-        // Run auto-enhancement if enabled
-        if (state.autoEnhancement) {
-          setTimeout(() => get().enhanceTask(newTask.id), 100)
-        }
-        
-        console.log('✅ Task successfully added to staging:', newTask.title)
-        } catch (error) {
-          console.error('🚨 Error adding task to staging:', error, { task })
-        }
+          // Check for duplicates if enabled
+          if (state.duplicateDetection) {
+            const duplicates = get().findDuplicates(newTask)
+            if (duplicates.length > 0) {
+              newTask.duplicateOf = duplicates[0]
+              newTask.suggestedImprovements.push({
+                type: 'similar_task',
+                message: `Similar to existing task: "${state.stagedTasks.find(t => t.id === duplicates[0])?.title}"`,
+                suggestion: 'Consider merging or adjusting to avoid duplication',
+                autoFix: false
+              })
+            }
+          }
+
+          set({ 
+            stagedTasks: [...state.stagedTasks, newTask] 
+          })
+
+          // Run auto-enhancement if enabled
+          if (state.autoEnhancement) {
+            setTimeout(() => get().enhanceTask(newTask.id), 100)
+          }
+          
+          console.log('✅ Task successfully added to staging:', newTask.title)
+          } catch (error) {
+            console.error('🚨 Error adding task to staging:', error, { task })
+          }
       },
 
       // Remove task from staging
@@ -503,5 +511,5 @@ function generateLabels(title: string, summary?: string, category?: string): str
   if (text.includes('design')) labels.push('design')
   if (text.includes('write') || text.includes('writing')) labels.push('writing')
   
-  return [...new Set(labels)] // Remove duplicates
+  return Array.from(new Set(labels)) // Remove duplicates
 }

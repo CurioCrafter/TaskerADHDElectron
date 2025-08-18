@@ -125,7 +125,7 @@ export function TaskClarificationChat({
         }))
 
         setMessages(prev => [...prev, ...aiMessages])
-        toast.info('🤔 Need a bit more information...')
+        toast('🤔 Need a bit more information...')
       } else {
         // We have enough information to create the task
         if (result.tasks && result.tasks.length > 0) {

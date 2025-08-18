@@ -76,6 +76,25 @@ export class VoiceCalendarIntegration {
   private forceClarificationForVagueInput(transcript: string): boolean {
     const lowerTranscript = transcript.toLowerCase()
     
+    // Check if the input already has sufficient details
+    const hasSpecificTime = /(?:at|by|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)/i.test(transcript) ||
+                           /(?:morning|afternoon|evening|night)/i.test(transcript) ||
+                           /(?:eleven|twelve|one|two|three|four|five|six|seven|eight|nine|ten)/i.test(transcript)
+    
+    const hasSpecificDay = /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month))/i.test(transcript)
+    
+    const hasSpecificAction = /(?:meeting|appointment|call|task|reminder|event)/i.test(transcript)
+    
+    // If we have specific time, day, and action, we probably don't need clarification
+    if (hasSpecificTime && hasSpecificDay && hasSpecificAction) {
+      console.log('🔧 [VOICE] Input has sufficient details - no clarification needed:', {
+        hasSpecificTime,
+        hasSpecificDay,
+        hasSpecificAction
+      })
+      return false
+    }
+    
     // Common vague patterns that should always trigger clarification
     const vaguePatterns = [
       'every week',
@@ -191,9 +210,12 @@ export class VoiceCalendarIntegration {
       // Determine threshold (settings or default 0.4)
       const threshold = typeof clarifyThreshold === 'number' ? clarifyThreshold : 0.4
       
+      // Check if the input already has sufficient details before deciding on clarification
+      const hasSufficientDetails = this.hasSufficientDetails(transcript)
+      
       // ALWAYS ask for clarification if confidence is low or if the input seems vague
       const isVague = this.isInputVague(transcript)
-      const needsClarification = result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0
+      const needsClarification = (result.confidence <= threshold || isVague || !result.calendarEvents || result.calendarEvents.length === 0) && !hasSufficientDetails
       
       console.log('🔧 [VOICE] Clarification analysis:', {
         transcript,
@@ -201,15 +223,22 @@ export class VoiceCalendarIntegration {
         threshold,
         isVague,
         hasCalendarEvents: !!result.calendarEvents && result.calendarEvents.length > 0,
+        hasSufficientDetails,
         needsClarification,
         forceClarification: this.forceClarificationForVagueInput(transcript)
       })
       
       if (needsClarification) {
-        console.log('VoiceCalendarIntegration: Input needs clarification - confidence:', result.confidence, 'isVague:', isVague)
+        console.log('VoiceCalendarIntegration: Input needs clarification - confidence:', result.confidence, 'isVague:', isVague, 'hasSufficientDetails:', hasSufficientDetails)
         
         // Generate clarifying questions
         const questions = this.generateClarifyingQuestions(transcript, result)
+        
+        // If no questions are needed, don't ask for clarification
+        if (questions.length === 0) {
+          console.log('🔧 [VOICE] No clarification questions needed - proceeding with task creation')
+          return this.processCalendarResult(result)
+        }
         
         return {
           intent: 'needs_clarification',
@@ -232,12 +261,13 @@ export class VoiceCalendarIntegration {
       // Check if we need to force clarification for vague inputs
       if (this.forceClarificationForVagueInput(transcript)) {
         console.log('🔧 [VOICE] Forcing clarification for vague input:', transcript)
-        const questions = [
-          'What specific time?',
-          'Which day(s) of the week?', 
-          'How often should this repeat?',
-          'Which restaurant or location?'
-        ]
+        const questions = this.generateClarifyingQuestions(transcript, result)
+        
+        // If no questions are needed, don't ask for clarification
+        if (questions.length === 0) {
+          console.log('🔧 [VOICE] No clarification questions needed - proceeding with task creation')
+          return this.processCalendarResult(result)
+        }
         
         return {
           intent: 'needs_clarification',
@@ -285,12 +315,7 @@ CRITICAL RULES:
 2. DO NOT split single requests into multiple tasks unless explicitly requested (e.g., "create 3 tasks for...")
 3. If someone says "every weekend" or similar recurring language, create ONE repeatable task/event, not multiple separate ones
 4. Be SKEPTICAL and ask questions for vague plans
-
-Analyze this voice input and determine:
-1. What tasks need to be created (DEFAULT: create ONE task unless explicitly told to create multiple)
-2. What calendar events need to be scheduled
-3. Any recurring patterns mentioned
-4. Whether the input is too vague and needs clarification
+5. If the input already contains specific time, day, and action details, DO NOT ask for clarification - proceed with task creation
 
 ALWAYS ASK CLARIFYING QUESTIONS FOR:
 - Vague timing: "sometime this week", "on a day during the week", "later", "every weekend" (without specific time)
@@ -300,6 +325,12 @@ ALWAYS ASK CLARIFYING QUESTIONS FOR:
 - Non-specific plans: "I want to go eat pizza every weekend" (What time? Which day of weekend? Where?)
 - Conflicting information: "every weekend at 6pm" (Saturday or Sunday or both?)
 - Generic recurring statements: "every week", "weekly" without specific day or time
+
+DO NOT ASK CLARIFICATION FOR:
+- Specific meetings: "meeting next monday at 11am" (has time, day, and action)
+- Specific appointments: "doctor appointment tomorrow at 2pm" (has time, day, and action)
+- Specific tasks: "review project on friday morning" (has day and time context)
+- Specific events: "team lunch next wednesday at noon" (has day, time, and action)
 
 Key patterns to detect:
 - Time references: "every weekend", "daily", "weekly", "monthly", "every Monday"
@@ -555,36 +586,91 @@ Voice input: "${transcript}"`;
     const lower = transcript.toLowerCase()
     const questions: string[] = []
     
-    if (lower.includes('every week') && !lower.includes('monday') && !lower.includes('tuesday') && !lower.includes('wednesday') && !lower.includes('thursday') && !lower.includes('friday') && !lower.includes('saturday') && !lower.includes('sunday')) {
-      questions.push('Which specific day of the week?')
-    }
+    // Analyze what's already provided vs what's missing
+    const hasTime = /(?:at|by|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)/i.test(transcript) ||
+                    /(?:morning|afternoon|evening|night)/i.test(transcript) ||
+                    /(?:eleven|twelve|one|two|three|four|five|six|seven|eight|nine|ten)/i.test(transcript)
     
-    if (lower.includes('every weekend') && !lower.includes('at') && !lower.includes('pm') && !lower.includes('am')) {
-      questions.push('What time on the weekend?')
-      questions.push('Saturday, Sunday, or both days?')
-    }
+    const hasDay = /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month))/i.test(transcript)
     
-    if (lower.includes('sometime this week') || lower.includes('on a day during the week')) {
-      questions.push('Which specific day?')
-      questions.push('What time?')
-    }
+    const hasAction = /(?:meeting|appointment|call|task|reminder|event)/i.test(transcript)
     
-    if (!lower.includes('at') && !lower.includes('pm') && !lower.includes('am') && !lower.includes('morning') && !lower.includes('afternoon') && !lower.includes('evening')) {
-      questions.push('What time?')
-    }
+    const hasLocation = /(?:restaurant|place|location|where|at\s+the|in\s+the)/i.test(transcript)
     
-    if (!lower.includes('where') && !lower.includes('restaurant') && !lower.includes('place') && !lower.includes('location')) {
-      questions.push('Where should this happen?')
-    }
+    const hasRecurrence = /(?:every|weekly|daily|monthly|repeat|recurring)/i.test(transcript)
     
-    // Default questions if none specific
-    if (questions.length === 0) {
+    console.log('🔧 [VOICE] Analyzing input for missing details:', {
+      transcript,
+      hasTime,
+      hasDay,
+      hasAction,
+      hasLocation,
+      hasRecurrence
+    })
+    
+    // Only ask for details that are actually missing
+    if (!hasTime) {
       questions.push('What specific time?')
-      questions.push('Which day(s) of the week?')
+    }
+    
+    if (!hasDay) {
+      if (hasRecurrence) {
+        questions.push('Which day(s) of the week?')
+      } else {
+        questions.push('Which day?')
+      }
+    }
+    
+    if (hasRecurrence && !hasTime) {
       questions.push('How often should this repeat?')
     }
     
+    // Only ask for location if it's relevant (e.g., going somewhere, eating out)
+    if (!hasLocation && (lower.includes('go to') || lower.includes('eat') || lower.includes('visit') || lower.includes('meet'))) {
+      questions.push('Where should this happen?')
+    }
+    
+    // If we have all the essential details, don't ask unnecessary questions
+    if (questions.length === 0 && hasTime && hasDay && hasAction) {
+      console.log('🔧 [VOICE] All essential details provided - no clarification questions needed')
+      return []
+    }
+    
     return questions
+  }
+
+  private hasSufficientDetails(transcript: string): boolean {
+    const lower = transcript.toLowerCase()
+    
+    // Check for specific time
+    const hasTime = /(?:at|by|before|after)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)/i.test(transcript) ||
+                    /(?:morning|afternoon|evening|night)/i.test(transcript) ||
+                    /(?:eleven|twelve|one|two|three|four|five|six|seven|eight|nine|ten)/i.test(transcript)
+    
+    // Check for specific day
+    const hasDay = /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month))/i.test(transcript)
+    
+    // Check for specific action
+    const hasAction = /(?:meeting|appointment|call|task|reminder|event)/i.test(transcript)
+    
+    // If we have time, day, and action, that's sufficient for most cases
+    if (hasTime && hasDay && hasAction) {
+      console.log('🔧 [VOICE] Input has sufficient details (time, day, action):', { hasTime, hasDay, hasAction })
+      return true
+    }
+    
+    // For recurring tasks, we need more specific details
+    const hasRecurrence = /(?:every|weekly|daily|monthly|repeat|recurring)/i.test(transcript)
+    if (hasRecurrence) {
+      // Recurring tasks need more specific details
+      if (hasTime && hasDay) {
+        console.log('🔧 [VOICE] Recurring task has sufficient details (time, day):', { hasTime, hasDay, hasRecurrence })
+        return true
+      }
+    }
+    
+    console.log('🔧 [VOICE] Input lacks sufficient details:', { hasTime, hasDay, hasAction, hasRecurrence })
+    return false
   }
 }
 

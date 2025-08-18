@@ -77,7 +77,7 @@ export default function DashboardPage() {
 
     setIsCreatingTask(true)
     try {
-      const success = await createTask(taskData, currentBoard.id)
+      const success = await createTask(taskData)
       if (success) {
         toast.success('Task created!')
         setShowTaskForm(false)
@@ -401,13 +401,9 @@ export default function DashboardPage() {
           <EnergyFilter
             isOpen={showEnergyFilter}
             onClose={() => setShowEnergyFilter(false)}
-            onFilter={(tasks) => {
+            onTasksFiltered={(tasks) => {
               setFilteredTasks(tasks)
               setIsFiltered(true)
-            }}
-            onClearFilter={() => {
-              setFilteredTasks([])
-              setIsFiltered(false)
             }}
           />
         )}
