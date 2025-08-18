@@ -622,66 +622,26 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={async () => {
-                        // Force clarification mode
-                        const openaiKey = localStorage.getItem('openai_api_key')
-                        if (!openaiKey) {
-                          toast.error('OpenAI API key required. Please configure in Settings.')
-                          return
-                        }
-                        
-                        setIsShaping(true)
-                        try {
-                          const cal = new VoiceCalendarIntegration(openaiKey)
-                          const clarifyThreshold = useSettingsStore.getState().voiceSettings?.aiClarifyThreshold ?? 0.4
-                          
-                          // Force clarification by setting a very low threshold
-                          const result = await cal.processVoiceInput(transcript, 0.1)
-                          
-                          if (result.intent === 'needs_clarification') {
-                            setTaskProposals({
-                              tasks: result.tasks.map(task => ({
-                                ...task,
-                                confidence: 0.3
-                              })),
-                              processingTime: Date.now() - Date.now()
-                            })
-                            setShowProposals(true)
-                            toast.success('🤔 Asking for more details...')
-                          } else {
-                            // If it still doesn't need clarification, show the result
-                            setTaskProposals({
-                              tasks: result.tasks.map(task => ({
-                                ...task,
-                                confidence: 0.8
-                              })),
-                              processingTime: Date.now() - Date.now()
-                            })
-                            setShowProposals(true)
-                            toast.success('✅ Tasks generated!')
-                          }
-                        } catch (error) {
-                          console.error('Force clarification failed:', error)
-                          toast.error('Failed to process request')
-                        } finally {
-                          setIsShaping(false)
-                        }
+                      onClick={() => {
+                        // Always open clarification chat for any input
+                        console.log('🔧 [VOICE] User requested clarification for:', transcript)
+                        const questions = [
+                          'What specific time do you want this to happen?',
+                          'Which day(s) of the week?',
+                          'How often should this repeat?',
+                          'Where should this happen?',
+                          'Any other specific details?'
+                        ]
+                        setClarificationQuestions(questions)
+                        setShowClarificationChat(true)
+                        toast.success('🤔 Let\'s get more details about your request!')
                       }}
-                      disabled={isShaping}
+                      disabled={!transcript || transcript.trim().length < 5}
                       className="btn-secondary flex items-center space-x-2"
-                      title="Force the AI to ask clarifying questions about your request"
+                      title="Ask clarifying questions about your request"
                     >
-                      {isShaping ? (
-                        <>
-                          <div className="spinner w-4 h-4"></div>
-                          <span>Processing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>❓</span>
-                          <span>Ask for Details</span>
-                        </>
-                      )}
+                      <span>❓</span>
+                      <span>Ask for Details</span>
                     </button>
                     <button
                       onClick={() => {
@@ -699,6 +659,51 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       title="Test the clarification chat component"
                     >
                       🧪 Test Chat
+                    </button>
+                    <button
+                      onClick={async () => {
+                        // Debug: Test AI processing with a specific input
+                        console.log('🧪 Testing AI processing...')
+                        const openaiKey = localStorage.getItem('openai_api_key')
+                        if (!openaiKey) {
+                          toast.error('OpenAI API key required')
+                          return
+                        }
+                        
+                        setIsShaping(true)
+                        try {
+                          const cal = new VoiceCalendarIntegration(openaiKey)
+                          const testInput = 'I want to eat pizza every weekend at 6pm'
+                          console.log('🧪 Testing with input:', testInput)
+                          
+                          const result = await cal.processVoiceInput(testInput, 0.1)
+                          console.log('🧪 AI result:', JSON.stringify(result, null, 2))
+                          
+                          // Show the result in a toast
+                          toast.success(`AI returned: ${result.intent}, ${result.tasks?.length || 0} tasks, ${result.calendarEvents?.length || 0} events`)
+                          
+                          // If it's a repeatable task, show the details
+                          if (result.tasks?.[0]?.isRepeatable) {
+                            const task = result.tasks[0]
+                            console.log('🧪 Repeatable task details:', {
+                              isRepeatable: task.isRepeatable,
+                              repeatPattern: task.repeatPattern,
+                              repeatInterval: task.repeatInterval,
+                              repeatDays: task.repeatDays,
+                              repeatCount: task.repeatCount
+                            })
+                          }
+                        } catch (error) {
+                          console.error('🧪 AI test failed:', error)
+                          toast.error('AI test failed')
+                        } finally {
+                          setIsShaping(false)
+                        }
+                      }}
+                      className="btn-ghost flex items-center space-x-2 text-xs"
+                      title="Test AI processing with a specific input"
+                    >
+                      🧪 Test AI
                     </button>
                     <button
                       onClick={handleShapeIntoTasks}
