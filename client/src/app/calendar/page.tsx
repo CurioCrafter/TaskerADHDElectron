@@ -10,9 +10,78 @@ import { TaskForm } from '@/components/ui/task-form'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays, isToday, parseISO } from 'date-fns'
 import type { Task } from '@/types'
 
+// Example tasks to demonstrate different types and repeatable patterns
+const EXAMPLE_TASKS = [
+  {
+    title: 'Daily Standup',
+    summary: 'Team daily standup meeting',
+    priority: 'HIGH' as const,
+    energy: 'LOW' as const,
+    dueAt: new Date().toISOString(),
+    estimateMin: 15,
+    isRepeatable: true,
+    repeatPattern: 'daily' as const,
+    repeatInterval: 1,
+    boardName: 'Work',
+    boardId: 'work-board'
+  },
+  {
+    title: 'Weekly Review',
+    summary: 'Review progress and plan next week',
+    priority: 'MEDIUM' as const,
+    energy: 'MEDIUM' as const,
+    dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Next Monday
+    estimateMin: 60,
+    isRepeatable: true,
+    repeatPattern: 'weekly' as const,
+    repeatInterval: 1,
+    repeatDays: [1], // Monday
+    boardName: 'Personal',
+    boardId: 'personal-board'
+  },
+  {
+    title: 'Monthly Budget Review',
+    summary: 'Review monthly expenses and budget',
+    priority: 'MEDIUM' as const,
+    energy: 'LOW' as const,
+    dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Next month
+    estimateMin: 45,
+    isRepeatable: true,
+    repeatPattern: 'monthly' as const,
+    repeatInterval: 1,
+    boardName: 'Finance',
+    boardId: 'finance-board'
+  },
+  {
+    title: 'Grocery Shopping',
+    summary: 'Weekly grocery shopping trip',
+    priority: 'MEDIUM' as const,
+    energy: 'LOW' as const,
+    dueAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // This weekend
+    estimateMin: 90,
+    isRepeatable: true,
+    repeatPattern: 'weekly' as const,
+    repeatInterval: 1,
+    repeatDays: [0, 6], // Weekend
+    boardName: 'Personal',
+    boardId: 'personal-board'
+  },
+  {
+    title: 'Project Deadline',
+    summary: 'Important project milestone',
+    priority: 'URGENT' as const,
+    energy: 'HIGH' as const,
+    dueAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), // Next week
+    estimateMin: 240,
+    isRepeatable: false,
+    boardName: 'Work',
+    boardId: 'work-board'
+  }
+]
+
 export default function CalendarPage() {
   const { boards, fetchBoards, isLoading } = useBoardStore()
-  const { debugMode } = useSettingsStore()
+  const { debugMode, showCalendarPlusButtons, toggleCalendarPlusButtons } = useSettingsStore()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [isInitializing, setIsInitializing] = useState(true)
   
@@ -144,6 +213,25 @@ export default function CalendarPage() {
     })
     
     return allTasks
+  }
+
+  // Get example tasks for demonstration (when no real tasks exist)
+  const getExampleTasks = (): (Task & { boardName: string; boardId: string })[] => {
+    // Only show examples if no real tasks exist
+    const realTasks = getAllTasksWithDates()
+    if (realTasks.length > 0) return []
+    
+    return EXAMPLE_TASKS.map((task, index) => ({
+      ...task,
+      id: `example-${index}`,
+      boardId: task.boardId,
+      columnId: 'example-column',
+      position: index,
+      labels: [],
+      subtasks: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
   }
 
   // Handle opening task form for a specific date
@@ -284,9 +372,11 @@ export default function CalendarPage() {
   // Get all tasks including recurring instances for a date range
   const getAllTasksWithRecurring = (startDate: Date, endDate: Date) => {
     const baseTasks = getAllTasksWithDates()
+    const exampleTasks = getExampleTasks()
+    const allTasks = [...baseTasks, ...exampleTasks]
     const allInstances: (Task & { boardName: string; boardId: string })[] = []
     
-    baseTasks.forEach(task => {
+    allTasks.forEach(task => {
       if (task.isRepeatable) {
         const instances = generateRecurringInstances(task, startDate, endDate)
         allInstances.push(...instances)
@@ -404,6 +494,20 @@ export default function CalendarPage() {
                   {format(day, 'd')}
                 </div>
                 
+                {/* Plus button for adding tasks */}
+                {showCalendarPlusButtons && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAddTaskForDate(day)
+                    }}
+                    className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-600 dark:text-blue-300 text-xs font-bold flex items-center justify-center transition-colors hover:scale-110 mb-2"
+                    title={`Add task for ${format(day, 'MMMM d, yyyy')}`}
+                  >
+                    +
+                  </button>
+                )}
+                
                 <div className="space-y-1">
                   {tasksForDay.slice(0, 3).map((task, idx) => (
                     <div
@@ -472,13 +576,15 @@ export default function CalendarPage() {
                 }`}>
                   <div className="text-sm font-medium">{format(day, 'EEE')}</div>
                   <div className="text-lg font-bold">{format(day, 'd')}</div>
-                  <button
-                    onClick={() => handleAddTaskForDate(day)}
-                    className="mt-1 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-600 dark:text-blue-300 text-xs font-bold flex items-center justify-center transition-colors hover:scale-110"
-                    title={`Add task for ${format(day, 'MMMM d, yyyy')}`}
+                  {showCalendarPlusButtons && (
+                    <button
+                      onClick={() => handleAddTaskForDate(day)}
+                      className="mt-1 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-600 dark:text-blue-300 text-xs font-bold flex items-center justify-center transition-colors hover:scale-110"
+                      title={`Add task for ${format(day, 'MMMM d, yyyy')}`}
                   >
-                    +
-                  </button>
+                      +
+                    </button>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -506,7 +612,7 @@ export default function CalendarPage() {
                       )}
                     </div>
                   ))}
-                  {tasksForDay.length === 0 && (
+                  {tasksForDay.length === 0 && showCalendarPlusButtons && (
                     <div className="text-center py-4 text-gray-400 dark:text-gray-500 text-xs">
                       Click + to add task
                     </div>
@@ -701,14 +807,31 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Calendar Views */}
-        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+        {/* Calendar Controls */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
           <div className="flex items-center space-x-2 text-blue-800 dark:text-blue-200">
             <span className="text-lg">💡</span>
             <div>
               <p className="font-medium">Quick Task Creation</p>
-              <p className="text-sm opacity-90">Click the <span className="font-mono bg-blue-200 dark:bg-blue-800 px-1 rounded">+</span> button on any calendar day to add a task directly for that date!</p>
+              <p className="text-sm opacity-90">Use the <span className="font-mono bg-blue-200 dark:bg-blue-800 px-1 rounded">+</span> buttons on calendar days to add tasks directly for specific dates!</p>
             </div>
+          </div>
+          
+          {/* Plus Button Toggle */}
+          <div className="flex items-center space-x-2">
+            <label className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+              Show + buttons:
+            </label>
+            <button
+              onClick={toggleCalendarPlusButtons}
+              className={`px-3 py-1 text-xs rounded transition-colors ${
+                showCalendarPlusButtons
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200'
+              }`}
+            >
+              {showCalendarPlusButtons ? 'ON' : 'OFF'}
+            </button>
           </div>
         </div>
         
@@ -718,7 +841,7 @@ export default function CalendarPage() {
 
         {/* Calendar Legend */}
         <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-          <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
             <div className="flex items-center space-x-2">
               <span className="w-3 h-3 rounded-full bg-red-500"></span>
               <span>Urgent</span>
@@ -742,6 +865,10 @@ export default function CalendarPage() {
             <div className="flex items-center space-x-2">
               <span className="text-blue-600 dark:text-blue-400">+</span>
               <span>Add Task</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-purple-600 dark:text-purple-400">💡</span>
+              <span>Example Task</span>
             </div>
           </div>
         </div>
@@ -787,7 +914,7 @@ export default function CalendarPage() {
             <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
               {getAllTasksWithDates().filter(task => {
                 const taskDate = parseISO(task.dueAt!)
-                const weekEnd = endOfWeek(new Date())
+                const weekEnd = endOfWeek(currentDate)
                 return taskDate >= new Date() && taskDate <= weekEnd
               }).length}
             </div>
@@ -808,6 +935,19 @@ export default function CalendarPage() {
             <div className="text-sm text-gray-500 dark:text-gray-400">Total Scheduled</div>
           </div>
         </div>
+        
+        {/* Example Tasks Note */}
+        {getExampleTasks().length > 0 && (
+          <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg">
+            <div className="flex items-center space-x-2 text-purple-800 dark:text-purple-200">
+              <span className="text-lg">💡</span>
+              <div>
+                <p className="font-medium">Example Tasks Loaded</p>
+                <p className="text-sm opacity-90">These are demonstration tasks showing different types including repeatable patterns. Create your own tasks to replace them!</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Task Edit Modal */}

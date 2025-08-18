@@ -4,6 +4,15 @@
 
 TaskerADHD is designed specifically for people with ADHD, incorporating research-based strategies to help manage time blindness, hyperfocus, and executive function challenges.
 
+## 🔑 Required API Keys
+
+**⚠️ IMPORTANT: You need the following API keys to use all features:**
+
+- **OpenAI API Key** - For AI-powered task creation and voice processing
+- **Deepgram API Key** - For speech-to-text voice capture functionality
+
+> **Note:** The app will work without these keys, but voice features and AI assistance will be disabled.
+
 ## ✨ Key Features
 
 ### 🧠 ADHD-Focused Design

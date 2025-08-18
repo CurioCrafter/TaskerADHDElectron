@@ -7,6 +7,10 @@ interface SettingsState extends UserSettings {
   debugMode: boolean
   toggleDebugMode: () => void
   
+  // Calendar settings
+  showCalendarPlusButtons: boolean
+  toggleCalendarPlusButtons: () => void
+  
   // Actions
   updateSettings: (settings: Partial<UserSettings>) => void
   resetSettings: () => void
@@ -61,6 +65,16 @@ export const useSettingsStore = create<SettingsState>()(
           }
           return { debugMode: newDebugMode }
         })
+      },
+
+      // Calendar settings - defaults to true
+      showCalendarPlusButtons: true,
+
+      // Toggle calendar plus buttons
+      toggleCalendarPlusButtons: () => {
+        set((state) => ({
+          showCalendarPlusButtons: !state.showCalendarPlusButtons
+        }))
       },
 
       // Update settings
