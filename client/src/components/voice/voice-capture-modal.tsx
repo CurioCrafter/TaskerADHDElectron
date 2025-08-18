@@ -8,6 +8,7 @@ import { TaskShaper } from '@/services/llm/task-shaper'
 import { VoiceCalendarIntegration, VoiceCalendarResult } from '@/services/llm/voice-calendar-integration'
 import { VoiceCalendarModal } from './voice-calendar-modal'
 import { TaskProposalModal } from './task-proposal-modal'
+import { TaskClarificationChat } from './task-clarification-chat'
 import { toast } from 'react-hot-toast'
 import type { TaskShapingResult } from '@/services/llm/task-shaper'
 
@@ -50,6 +51,10 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
   const [showCalendarProposals, setShowCalendarProposals] = useState(false)
   const [isShaping, setIsShaping] = useState(false)
   const [localInitialized, setLocalInitialized] = useState(false)
+  
+  // Clarification chat state
+  const [showClarificationChat, setShowClarificationChat] = useState(false)
+  const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([])
 
   // Combined initialization state - define early to avoid circular dependency
   const isActuallyInitialized = isInitialized || localInitialized
@@ -215,16 +220,14 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
       const result = await cal.processVoiceInput(transcript, clarifyThreshold)
       
       if (result.intent === 'needs_clarification') {
-        // Show clarification needed - don't auto-process
-        setTaskProposals({
-          tasks: result.tasks.map(task => ({
-            ...task,
-            confidence: result.confidence || 0.3
-          })),
-          processingTime: Date.now() - Date.now()
-        })
-        setShowProposals(true)
-        toast.success('🤔 AI needs more details. Click "Ask for Details" to get specific questions.')
+        // Show clarification chat instead of staging
+        setClarificationQuestions(result.clarifyingQuestions || [
+          'What specific time?',
+          'Which day(s) of the week?',
+          'How often should this repeat?'
+        ])
+        setShowClarificationChat(true)
+        toast.success('🤔 AI needs more details. Let\'s chat about it!')
         return
       }
 
@@ -761,6 +764,27 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         proposals={calendarProposals}
         transcript={transcript}
         useStaging={useStaging}
+      />
+
+      {/* Clarification Chat Modal */}
+      <TaskClarificationChat
+        isOpen={showClarificationChat}
+        onClose={() => {
+          setShowClarificationChat(false)
+          setClarificationQuestions([])
+        }}
+        originalTranscript={transcript}
+        initialQuestions={clarificationQuestions}
+        onTaskCreated={(task) => {
+          // Handle the created task from the chat
+          setTaskProposals({
+            tasks: [task],
+            processingTime: Date.now() - Date.now()
+          })
+          setShowProposals(true)
+          setShowClarificationChat(false)
+          setClarificationQuestions([])
+        }}
       />
     </div>
   )

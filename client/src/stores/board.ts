@@ -254,6 +254,19 @@ export const useBoardStore = create<BoardState>()(
 
         console.log('🔧 [STORE] Creating task:', taskData)
         console.log('🔧 [STORE] Current board:', { id: currentBoard.id, name: currentBoard.name })
+        
+        // Debug: log repeatable fields specifically
+        if (taskData.isRepeatable) {
+          console.log('🔧 [STORE] Repeatable task details:', {
+            isRepeatable: taskData.isRepeatable,
+            repeatPattern: taskData.repeatPattern,
+            repeatInterval: taskData.repeatInterval,
+            repeatDays: taskData.repeatDays,
+            repeatCount: taskData.repeatCount,
+            repeatEndDate: taskData.repeatEndDate
+          })
+        }
+        
         set({ isLoading: true, error: null })
 
         try {

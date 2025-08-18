@@ -169,6 +169,15 @@ export interface TaskProposal {
   labels?: string[]
   subtasks?: string[]
   columnId?: string
+  // Repeatable task fields - must match Task interface
+  isRepeatable?: boolean
+  repeatPattern?: 'daily' | 'weekly' | 'monthly' | 'custom'
+  repeatInterval?: number
+  repeatDays?: number[]
+  repeatEndDate?: string
+  repeatCount?: number
+  parentTaskId?: string
+  nextDueDate?: string
 }
 
 export interface DedupCandidate {
