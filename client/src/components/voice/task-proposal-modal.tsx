@@ -14,7 +14,7 @@ interface TaskProposalModalProps {
   useStaging?: boolean
 }
 
-export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useStaging = true }: TaskProposalModalProps) {
+export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useStaging = false }: TaskProposalModalProps) {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [editingTask, setEditingTask] = useState<string | null>(null)
   const [editedTasks, setEditedTasks] = useState<Map<string, Partial<TaskProposal>>>(new Map())
@@ -61,6 +61,14 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
       toast.error('Please select at least one task to create')
       return
     }
+
+    // Debug: log the staging decision
+    console.log('🔧 [TASK_PROPOSAL] Staging decision:', {
+      useStaging,
+      currentBoard: !!currentBoard,
+      willUseStaging: !currentBoard || useStaging,
+      selectedTasksCount: selectedTasksArray.length
+    })
 
     setIsCreating(true)
     let successCount = 0
@@ -114,11 +122,15 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
       }
 
       if (successCount > 0) {
-        toast.success(`📥 Sent ${successCount} task${successCount > 1 ? 's' : ''} to staging for review!`)
-        toast('💡 Check the Staging area to review and approve your tasks', { duration: 4000 })
+        if (useStaging) {
+          toast.success(`📥 Sent ${successCount} task${successCount > 1 ? 's' : ''} to staging for review!`)
+          toast('💡 Check the Staging area to review and approve your tasks', { duration: 4000 })
+        } else {
+          toast.success(`✅ Created ${successCount} task${successCount > 1 ? 's' : ''} directly on your board!`)
+        }
         onClose()
       } else {
-        toast.error('Failed to stage any tasks')
+        toast.error('Failed to create tasks')
       }
 
     } catch (error) {
@@ -479,8 +491,25 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              💡 Review tasks carefully before accepting. You can edit titles and details above.
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                💡 Review tasks carefully before accepting. You can edit titles and details above.
+              </div>
+              <label className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                <input 
+                  type="checkbox" 
+                  className="mr-2" 
+                  checked={useStaging} 
+                  onChange={(e) => {
+                    // This would need to be handled by the parent component
+                    // For now, just show the current state
+                  }} 
+                  disabled
+                />
+                <span className={useStaging ? 'text-orange-600 dark:text-orange-400 font-medium' : 'text-gray-600 dark:text-gray-300'}>
+                  {useStaging ? '⚠️ Staging Enabled' : 'Direct to Board'}
+                </span>
+              </label>
             </div>
             <div className="flex space-x-3">
               <button

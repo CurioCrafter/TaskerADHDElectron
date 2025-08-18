@@ -6,6 +6,7 @@ import { useBoardStore } from '@/stores/board'
 import { useSettingsStore } from '@/stores/settings'
 import { AppLayout } from '@/components/layout/app-layout'
 import { TaskEditModal } from '@/components/ui/task-edit-modal'
+import { TaskForm } from '@/components/ui/task-form'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays, isToday, parseISO } from 'date-fns'
 import type { Task } from '@/types'
 
@@ -55,6 +56,9 @@ export default function CalendarPage() {
   const [selectedBoard, setSelectedBoard] = useState<string>('all')
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+  const [selectedDateForNewTask, setSelectedDateForNewTask] = useState<Date | null>(null)
+  const [newTask, setNewTask] = useState<Task | null>(null)
 
   // Load boards on mount with proper loading state
   useEffect(() => {
@@ -89,6 +93,24 @@ export default function CalendarPage() {
     }
   }, [])
 
+  // Listen for task updates to refresh calendar (especially for repeatable tasks)
+  useEffect(() => {
+    const handler = () => {
+      console.log('🔧 [CALENDAR] Received taskUpdated event, refreshing calendar...')
+      setCurrentDate((d) => new Date(d.getTime()))
+    }
+    if (typeof window !== 'undefined') {
+      console.log('🔧 [CALENDAR] Adding event listener for taskUpdated')
+      window.addEventListener('taskUpdated', handler)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        console.log('🔧 [CALENDAR] Removing event listener for taskUpdated')
+        window.removeEventListener('taskUpdated', handler)
+      }
+    }
+  }, [])
+
   // Listen for board updates to refresh calendar
   useEffect(() => {
     if (boards && boards.length > 0) {
@@ -98,39 +120,78 @@ export default function CalendarPage() {
   }, [boards])
 
   // Get all tasks with due dates from all boards
-  const getAllTasksWithDates = () => {
-    if (!boards) return []
+  const getAllTasksWithDates = (): (Task & { boardName: string; boardId: string })[] => {
+    if (!boards || boards.length === 0) return []
     
     const allTasks: (Task & { boardName: string; boardId: string })[] = []
     
     boards.forEach(board => {
-      if (selectedBoard === 'all' || board.id === selectedBoard) {
-        board.columns?.forEach(column => {
-          column.tasks?.forEach(task => {
-            if (task.dueAt) {
-              allTasks.push({
-                ...task,
-                boardName: board.name,
-                boardId: board.id
-              })
-            }
-          })
+      if (board.columns) {
+        board.columns.forEach(column => {
+          if (column.tasks) {
+            column.tasks.forEach(task => {
+              if (task.dueAt) {
+                allTasks.push({
+                  ...task,
+                  boardName: board.name,
+                  boardId: board.id
+                })
+              }
+            })
+          }
         })
       }
     })
     
-    // Debug: log all tasks found
-    if (debugMode) {
-      console.log('🔧 [CALENDAR] All tasks with dates:', allTasks.map(t => ({
-        title: t.title,
-        dueAt: t.dueAt,
-        isRepeatable: t.isRepeatable,
-        repeatPattern: t.repeatPattern,
-        repeatDays: t.repeatDays
-      })))
+    return allTasks
+  }
+
+  // Handle opening task form for a specific date
+  const handleAddTaskForDate = (date: Date) => {
+    setSelectedDateForNewTask(date)
+    setIsTaskFormOpen(true)
+  }
+
+  // Handle task form submission
+  const handleTaskFormSubmit = async (taskData: any) => {
+    try {
+      // Add the selected date to the task data
+      if (selectedDateForNewTask) {
+        taskData.dueAt = selectedDateForNewTask.toISOString()
+      }
+      
+      // Create the task using the board store
+      const { createTask } = useBoardStore.getState()
+      if (createTask && selectedDateForNewTask) {
+        // Find the first board to use as default
+        const defaultBoard = boards?.[0]
+        if (defaultBoard && defaultBoard.columns?.[0]) {
+          const newTask = await createTask({
+            ...taskData,
+            boardId: defaultBoard.id,
+            columnId: defaultBoard.columns[0].id
+          })
+          
+          if (newTask) {
+            toast.success('Task created successfully!')
+            // Refresh the calendar
+            setCurrentDate((d) => new Date(d.getTime()))
+            
+            // Dispatch event to notify calendar that tasks have been updated
+            if (typeof window !== 'undefined') {
+              console.log('🔧 [CALENDAR] Dispatching taskUpdated event after creating task on calendar day')
+              window.dispatchEvent(new Event('taskUpdated'))
+            }
+            
+            setIsTaskFormOpen(false)
+            setSelectedDateForNewTask(null)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to create task:', error)
+      toast.error('Failed to create task')
     }
-    
-    return allTasks.sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
   }
 
   // Generate recurring task instances for calendar display
@@ -411,6 +472,13 @@ export default function CalendarPage() {
                 }`}>
                   <div className="text-sm font-medium">{format(day, 'EEE')}</div>
                   <div className="text-lg font-bold">{format(day, 'd')}</div>
+                  <button
+                    onClick={() => handleAddTaskForDate(day)}
+                    className="mt-1 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-600 dark:text-blue-300 text-xs font-bold flex items-center justify-center transition-colors hover:scale-110"
+                    title={`Add task for ${format(day, 'MMMM d, yyyy')}`}
+                  >
+                    +
+                  </button>
                 </div>
                 
                 <div className="space-y-2">
@@ -418,7 +486,7 @@ export default function CalendarPage() {
                     <div
                       key={idx}
                       className={`p-2 rounded text-xs text-white ${getPriorityColor(task.priority)} cursor-pointer hover:opacity-80`}
-                      title={`${task.title} - ${task.boardName}${task.isRepeatable ? ' (Repeatable)' : ''} - Click to edit`}
+                      title={`${task.title} - ${task.boardName}${task.isRepeatable ? ` (Repeatable: ${(task as any).repeatPattern || 'custom'} every ${(task as any).repeatInterval || 1} ${(task as any).repeatPattern === 'weekly' ? 'week(s)' : (task as any).repeatPattern === 'monthly' ? 'month(s)' : 'day(s)'}${(task as any).repeatCount ? `, ${(task as any).repeatCount} times` : ''})` : ''} - Click to edit`}
                       onClick={() => {
                         setEditingTask(task)
                         setIsEditModalOpen(true)
@@ -427,12 +495,22 @@ export default function CalendarPage() {
                       <div className="font-medium truncate flex items-center justify-between">
                         <span className="truncate flex-1">{task.title}</span>
                         {task.isRepeatable && (
-                          <span className="ml-1 text-xs" title="Repeatable task">🔄</span>
+                          <span className="ml-1 text-xs" title={`Repeatable: ${(task as any).repeatPattern || 'custom'} every ${(task as any).repeatInterval || 1} ${(task as any).repeatPattern === 'weekly' ? 'week(s)' : (task as any).repeatPattern === 'monthly' ? 'month(s)' : 'day(s)'}${(task as any).repeatCount ? `, ${(task as any).repeatCount} times` : ''}`}>🔄</span>
                         )}
                       </div>
                       <div className="text-xs opacity-90">{task.boardName}</div>
+                      {task.isRepeatable && (task as any).repeatCount && (
+                        <div className="text-xs opacity-75 mt-1">
+                          Repeats {(task as any).repeatCount} times
+                        </div>
+                      )}
                     </div>
                   ))}
+                  {tasksForDay.length === 0 && (
+                    <div className="text-center py-4 text-gray-400 dark:text-gray-500 text-xs">
+                      Click + to add task
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -489,6 +567,14 @@ export default function CalendarPage() {
                             <>
                               <span>•</span>
                               <span>{task.estimateMin}min</span>
+                            </>
+                          )}
+                          {task.isRepeatable && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600 dark:text-blue-400" title={`Repeatable: ${(task as any).repeatPattern || 'custom'} every ${(task as any).repeatInterval || 1} ${(task as any).repeatPattern === 'weekly' ? 'week(s)' : (task as any).repeatPattern === 'monthly' ? 'month(s)' : 'day(s)'}${(task as any).repeatCount ? `, ${(task as any).repeatCount} times` : ''}`}>
+                                🔄 Repeatable
+                              </span>
                             </>
                           )}
                         </div>
@@ -616,9 +702,49 @@ export default function CalendarPage() {
         )}
 
         {/* Calendar Views */}
+        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+          <div className="flex items-center space-x-2 text-blue-800 dark:text-blue-200">
+            <span className="text-lg">💡</span>
+            <div>
+              <p className="font-medium">Quick Task Creation</p>
+              <p className="text-sm opacity-90">Click the <span className="font-mono bg-blue-200 dark:bg-blue-800 px-1 rounded">+</span> button on any calendar day to add a task directly for that date!</p>
+            </div>
+          </div>
+        </div>
+        
         {viewMode === 'month' && renderMonthView()}
         {viewMode === 'week' && renderWeekView()}
         {viewMode === 'agenda' && renderAgendaView()}
+
+        {/* Calendar Legend */}
+        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full bg-red-500"></span>
+              <span>Urgent</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+              <span>High</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+              <span>Medium</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+              <span>Low</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-600 dark:text-blue-400">🔄</span>
+              <span>Repeatable Task</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-600 dark:text-blue-400">+</span>
+              <span>Add Task</span>
+            </div>
+          </div>
+        </div>
 
         {/* Selected Date Details */}
         {selectedDate && viewMode === 'month' && (
@@ -693,6 +819,19 @@ export default function CalendarPage() {
             setEditingTask(null)
           }}
           task={editingTask}
+        />
+      )}
+
+      {/* Task Form Modal for adding new tasks */}
+      {isTaskFormOpen && selectedDateForNewTask && (
+        <TaskForm
+          isOpen={isTaskFormOpen}
+          onClose={() => {
+            setIsTaskFormOpen(false)
+            setSelectedDateForNewTask(null)
+          }}
+          onSubmit={handleTaskFormSubmit}
+          boardId={boards?.[0]?.id}
         />
       )}
     </AppLayout>

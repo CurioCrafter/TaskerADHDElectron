@@ -347,6 +347,8 @@ For recurring patterns:
 - "weekly" = weekly recurrence (same day of week)
 - "monthly" = monthly recurrence
 
+IMPORTANT: For repeatable tasks without a specific end date, automatically set repeatEndDate to today's date to prevent infinite repetition.
+
 Response format:
 {
   "intent": "task_only" | "calendar_only" | "task_and_calendar" | "needs_clarification",
@@ -393,14 +395,14 @@ Response format:
 
 Examples:
 - "Set a recurring reminder for Chick-fil-A every weekend at 6pm" → ONE repeatable task + calendar events for Sat+Sun at 6pm, confidence 0.9
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], repeatCount: 52
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [0,6], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
 - "I want to eat pizza every week" → needs_clarification, confidence 0.2, questions: ["What day of the week?", "What time?", "Which restaurant or location?"]
 - "I want to go eat pizza every weekend" → needs_clarification, confidence 0.2, questions: ["What time on the weekend?", "Saturday, Sunday, or both?", "Which restaurant?"]
 - "Go to chick fil a on a day during the week" → needs_clarification, confidence 0.2, questions: ["Which day of the week?", "What time?"]
 - "Daily standup at 9am weekdays" → ONE repeatable task + weekly calendar events (Mon-Fri 9am), confidence 0.95
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1,2,3,4,5], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
 - "Review project every Monday morning at 9am" → ONE repeatable task + weekly calendar (Mondays 9am), confidence 0.9
-  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], repeatCount: 52
+  Task: isRepeatable: true, repeatPattern: "weekly", repeatInterval: 1, repeatDays: [1], repeatCount: 52, repeatEndDate: "2024-12-31T23:59:59.000Z"
 
 Current date/time context: ${new Date().toISOString()}
 User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
@@ -472,11 +474,24 @@ Voice input: "${transcript}"`;
       } : undefined
     })) || []
 
-    const tasks = result.tasks?.map((task: any) => ({
-      ...task,
-      id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : undefined
-    })) || []
+    const tasks = result.tasks?.map((task: any) => {
+      // Auto-set end date for repeatable tasks without an end date
+      let processedTask = {
+        ...task,
+        id: task.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : undefined
+      }
+      
+      // If task is repeatable but has no end date, set it to today to prevent infinite repetition
+      if (processedTask.isRepeatable && !processedTask.repeatEndDate) {
+        const today = new Date()
+        today.setHours(23, 59, 59, 999) // End of today
+        processedTask.repeatEndDate = today.toISOString()
+        console.log('🔧 [VOICE] Auto-setting repeatEndDate to today for repeatable task:', processedTask.title)
+      }
+      
+      return processedTask
+    }) || []
 
     return {
       intent: result.intent || 'task_and_calendar',

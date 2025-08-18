@@ -79,6 +79,13 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
     console.log('🔍 Voice modal - isInitialized changed to:', isInitialized, 'localInitialized:', localInitialized, 'combined:', isActuallyInitialized)
   }, [isInitialized, localInitialized, isActuallyInitialized])
 
+  // Debug: Monitor useStaging and task proposals
+  useEffect(() => {
+    if (showProposals) {
+      console.log('🔧 [VOICE_CAPTURE] TaskProposalModal opened with useStaging:', useStaging)
+    }
+  }, [showProposals, useStaging])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -223,7 +230,8 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
 
       // Process with voice calendar integration first
       const cal = new VoiceCalendarIntegration(openaiKey)
-      const clarifyThreshold = useSettingsStore.getState().voiceSettings?.aiClarifyThreshold ?? 0.4
+      // Use a higher confidence threshold for "Analyze Tasks" to make it the default high-confidence option
+      const clarifyThreshold = 0.2 // Lower threshold means AI will be more confident by default
       
       const result = await cal.processVoiceInput(transcript, clarifyThreshold)
       
@@ -252,36 +260,61 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         showTaskProposals: result.tasks && result.tasks.length > 0
       })
       
-      if (result.intent === 'needs_clarification' || (result.confidence && result.confidence < clarifyThreshold)) {
-        // Show clarification chat - either explicit clarification needed or low confidence
+      // Only show clarification chat if AI explicitly needs clarification
+      // "Analyze Tasks" should be the default high-confidence option
+      if (result.intent === 'needs_clarification') {
+        // Show clarification chat only when AI explicitly needs clarification
         console.log('🔧 [VOICE] Opening clarification chat with questions:', result.clarifyingQuestions)
         const questions = result.clarifyingQuestions || [
-          'What specific time?',
-          'Which day(s) of the week?',
-          'How often should this repeat?',
-          'Which restaurant or location?'
+          'What specific time should this task be done?',
+          'Which day(s) of the week should this task repeat?',
+          'How often should this task repeat?',
+          'What is the specific location or context for this task?'
         ]
         setClarificationQuestions(questions)
         setShowClarificationChat(true)
         console.log('🔧 [VOICE] Clarification chat state set:', { questions, showClarificationChat: true })
-        toast.success('🤔 AI needs more details. Let\'s chat about it!')
+        toast.success('🤔 AI needs more details to create a perfect task. Let\'s chat about it!')
         return
       }
 
-      // If we have a clear result, show it
+      // If we have a clear result, show it with high confidence
       if (result.calendarEvents && result.calendarEvents.length > 0) {
         setCalendarProposals(result)
         setShowCalendarProposals(true)
+        toast.success('✅ Calendar events generated!')
       } else if (result.tasks && result.tasks.length > 0) {
+        // Boost confidence for "Analyze Tasks" - this is the default high-confidence option
+        const boostedConfidence = Math.max(result.confidence || 0.8, 0.9)
         setTaskProposals({
           tasks: result.tasks.map(task => ({
             ...task,
-            confidence: result.confidence || 0.8
+            confidence: boostedConfidence
           })),
           processingTime: Date.now() - Date.now()
         })
         setShowProposals(true)
-        toast.success('✅ Tasks generated!')
+        toast.success('✅ Tasks analyzed and ready!')
+      } else {
+        // If no tasks or calendar events, but no clarification needed, create a basic task
+        const basicTask = {
+          id: `basic-${Date.now()}`,
+          title: transcript.trim(),
+          summary: `Task created from voice input: "${transcript.trim()}"`,
+          priority: 'MEDIUM' as const,
+          confidence: 0.9,
+          isRepeatable: false,
+          dueAt: undefined,
+          labels: [],
+          subtasks: []
+        }
+        
+        setTaskProposals({
+          tasks: [basicTask],
+          processingTime: Date.now() - Date.now()
+        })
+        setShowProposals(true)
+        toast.success('✅ Basic task created from your input!')
       }
     } catch (error) {
       console.error('Task shaping failed:', error)
@@ -625,17 +658,17 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       🤖 Ready to create tasks from your voice?
                     </h4>
                     <p className="text-sm text-purple-700 dark:text-purple-200 mt-1">
-                      AI will analyze your transcript and suggest actionable tasks
+                      AI will analyze your transcript and suggest perfectly formatted tasks
                     </p>
                   </div>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
                         setShowClarificationChat(true)
-                        toast.success('Opening clarification chat!')
+                        toast.success('Opening clarification chat to create a perfect task!')
                       }}
                       className="btn-ghost flex items-center space-x-2 text-xs"
-                      title="Ask for more details about this task"
+                      title="Ask for more details to create a perfect task"
                     >
                       ❓ Ask for Details
                     </button>
@@ -652,7 +685,7 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
                       ) : (
                         <>
                           <span>🎯</span>
-                          <span>Create Tasks</span>
+                          <span>Analyze Tasks</span>
                         </>
                       )}
                     </button>
@@ -740,6 +773,7 @@ export function VoiceCaptureModal({ isOpen, onClose, boardId, useStaging = false
         useStaging={useStaging}
       />
 
+      {/* Voice Calendar Modal */}
       <VoiceCalendarModal
         isOpen={showCalendarProposals}
         onClose={() => {

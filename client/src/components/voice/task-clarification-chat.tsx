@@ -59,7 +59,7 @@ export function TaskClarificationChat({
         {
           id: 'ai-intro',
           type: 'ai',
-          content: `I need more details about: "${originalTranscript}". Please answer these questions:`,
+          content: `I need more details to create a perfectly formatted task for: "${originalTranscript}". Please answer these questions:`,
           timestamp: new Date()
         },
         ...aiMessages
@@ -102,21 +102,28 @@ export function TaskClarificationChat({
 
       // Process the conversation with AI
       const cal = new VoiceCalendarIntegration(openaiKey)
-      const fullConversation = `${originalTranscript}\n\nUser responses:\n${messages
+      
+      // Build a comprehensive conversation context for better AI analysis
+      const userResponses = messages
         .filter(m => m.type === 'user')
         .map(m => m.content)
-        .join('\n')}\n\nLatest response: ${userMessage.content}`
-
-      const result = await cal.processVoiceInput(fullConversation, 0.3)
+        .join('\n')
+      
+      const fullConversation = `${originalTranscript}\n\nUser responses:\n${userResponses}\n\nLatest response: ${userMessage.content}`
+      
+      // Use a lower threshold for clarification chat to ensure we get detailed tasks
+      const result = await cal.processVoiceInput(fullConversation, 0.1)
 
       if (result.intent === 'needs_clarification') {
         // Still needs more clarification
-        const followUpQuestions = result.clarifyingQuestions || [
-          'Can you provide more specific details?',
-          'What else should I know about this?'
+        const questions = result.clarifyingQuestions || [
+          'What specific time should this task be done?',
+          'Which day(s) of the week should this task repeat?',
+          'How often should this task repeat?',
+          'What is the specific location or context for this task?'
         ]
 
-        const aiMessages = followUpQuestions.map((question, index) => ({
+        const aiMessages = questions.map((question, index) => ({
           id: `ai-followup-${Date.now()}-${index}`,
           type: 'ai' as const,
           content: question,
@@ -130,17 +137,21 @@ export function TaskClarificationChat({
         // We have enough information to create the task
         if (result.tasks && result.tasks.length > 0) {
           const task = result.tasks[0]
-          setCurrentTask(task)
+          
+          // Enhance the task with any missing details from the conversation
+          const enhancedTask = enhanceTaskWithConversation(task, originalTranscript, messages, userMessage.content)
+          
+          setCurrentTask(enhancedTask)
           
           const aiMessage: ChatMessage = {
             id: `ai-success-${Date.now()}`,
             type: 'ai',
-            content: `Perfect! I have enough information now. Here's what I'm going to create:\n\n**${task.title}**\n${task.summary || ''}\n\nDue: ${task.dueAt ? new Date(task.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${task.priority || 'Medium'}\n${task.isRepeatable ? '🔄 This will be a repeatable task' : ''}`,
+            content: `Perfect! I have enough information now. Here's the perfectly formatted task I'm going to create:\n\n**${enhancedTask.title}**\n${enhancedTask.summary || ''}\n\nDue: ${enhancedTask.dueAt ? new Date(enhancedTask.dueAt).toLocaleDateString() : 'No due date'}\nPriority: ${enhancedTask.priority || 'Medium'}\n${enhancedTask.isRepeatable ? '🔄 This will be a repeatable task' : ''}`,
             timestamp: new Date()
           }
 
           setMessages(prev => [...prev, aiMessage])
-          toast.success('✅ Ready to create task!')
+          toast.success('✅ Perfect! Task is perfectly formatted and ready!')
         } else {
           throw new Error('No task generated from conversation')
         }
@@ -162,11 +173,109 @@ export function TaskClarificationChat({
     }
   }
 
+  // Function to enhance task with conversation context and fill missing details
+  const enhanceTaskWithConversation = (task: any, originalTranscript: string, messages: ChatMessage[], latestResponse: string): any => {
+    const enhancedTask = { ...task }
+    
+    // Extract day information from conversation if missing
+    if (!enhancedTask.dueAt) {
+      const dayMatch = extractDayFromConversation(originalTranscript, messages, latestResponse)
+      if (dayMatch) {
+        enhancedTask.dueAt = dayMatch
+      }
+    }
+    
+    // Extract time information if missing
+    if (!enhancedTask.dueAt || !enhancedTask.dueAt.toString().includes('T')) {
+      const timeMatch = extractTimeFromConversation(originalTranscript, messages, latestResponse)
+      if (timeMatch && enhancedTask.dueAt) {
+        const currentDate = enhancedTask.dueAt instanceof Date ? enhancedTask.dueAt : new Date(enhancedTask.dueAt)
+        const [hours, minutes] = timeMatch.split(':').map(Number)
+        currentDate.setHours(hours, minutes, 0, 0)
+        enhancedTask.dueAt = currentDate.toISOString()
+      }
+    }
+    
+    // Ensure all required fields are present
+    if (!enhancedTask.id) enhancedTask.id = `enhanced-${Date.now()}`
+    if (!enhancedTask.title) enhancedTask.title = originalTranscript.trim()
+    if (!enhancedTask.summary) enhancedTask.summary = `Task created from voice input: "${originalTranscript.trim()}"`
+    if (!enhancedTask.priority) enhancedTask.priority = 'MEDIUM'
+    if (!enhancedTask.confidence) enhancedTask.confidence = 0.9
+    if (!enhancedTask.isRepeatable) enhancedTask.isRepeatable = false
+    if (!enhancedTask.labels) enhancedTask.labels = []
+    if (!enhancedTask.subtasks) enhancedTask.subtasks = []
+    
+    return enhancedTask
+  }
+
+  // Helper function to extract day information from conversation
+  const extractDayFromConversation = (originalTranscript: string, messages: ChatMessage[], latestResponse: string): string | null => {
+    const allText = `${originalTranscript} ${messages.map(m => m.content).join(' ')} ${latestResponse}`.toLowerCase()
+    
+    // Look for specific days
+    const dayPatterns = [
+      { pattern: /(monday|mon)/i, day: 1 },
+      { pattern: /(tuesday|tues)/i, day: 2 },
+      { pattern: /(wednesday|wed)/i, day: 3 },
+      { pattern: /(thursday|thurs)/i, day: 4 },
+      { pattern: /(friday|fri)/i, day: 5 },
+      { pattern: /(saturday|sat)/i, day: 6 },
+      { pattern: /(sunday|sun)/i, day: 0 },
+      { pattern: /(today)/i, day: new Date().getDay() },
+      { pattern: /(tomorrow)/i, day: (new Date().getDay() + 1) % 7 }
+    ]
+    
+    for (const { pattern, day } of dayPatterns) {
+      if (pattern.test(allText)) {
+        const targetDate = new Date()
+        const currentDay = targetDate.getDay()
+        const daysToAdd = (day - currentDay + 7) % 7
+        targetDate.setDate(targetDate.getDate() + daysToAdd)
+        return targetDate.toISOString()
+      }
+    }
+    
+    return null
+  }
+
+  // Helper function to extract time information from conversation
+  const extractTimeFromConversation = (originalTranscript: string, messages: ChatMessage[], latestResponse: string): string | null => {
+    const allText = `${originalTranscript} ${messages.map(m => m.content).join(' ')} ${latestResponse}`.toLowerCase()
+    
+    // Look for time patterns
+    const timePatterns = [
+      /(\d{1,2}):(\d{2})\s*(am|pm)/i,  // 2:30 PM
+      /(\d{1,2})\s*(am|pm)/i,          // 2 PM
+      /(\d{1,2}):(\d{2})/i,            // 14:30
+      /(\d{1,2})\s*o'clock/i,          // 2 o'clock
+    ]
+    
+    for (const pattern of timePatterns) {
+      const match = allText.match(pattern)
+      if (match) {
+        let hours = parseInt(match[1])
+        let minutes = match[2] ? parseInt(match[2]) : 0
+        
+        // Handle AM/PM
+        if (match[3]) {
+          const ampm = match[3].toLowerCase()
+          if (ampm === 'pm' && hours !== 12) hours += 12
+          if (ampm === 'am' && hours === 12) hours = 0
+        }
+        
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+      }
+    }
+    
+    return null
+  }
+
   const handleCreateTask = () => {
     if (currentTask) {
       onTaskCreated(currentTask)
       onClose()
-      toast.success('Task created successfully!')
+      toast.success('🎯 Perfect task created successfully!')
     }
   }
 
@@ -189,7 +298,7 @@ export function TaskClarificationChat({
               💬 Task Clarification Chat
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Let's get the details right for your task
+              Let's get the details right for your perfectly formatted task
             </p>
           </div>
           <button
@@ -218,7 +327,7 @@ export function TaskClarificationChat({
                 <div className="whitespace-pre-wrap">{message.content}</div>
                 {message.isQuestion && (
                   <div className="mt-2 text-xs opacity-75">
-                    💭 Please answer this question
+                    💭 Please provide details for this question
                   </div>
                 )}
                 <div className="text-xs opacity-60 mt-1">
@@ -234,7 +343,7 @@ export function TaskClarificationChat({
                 <div className="flex items-center space-x-2">
                   <div className="spinner w-4 h-4"></div>
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    AI is thinking...
+                    AI is analyzing your input to create a perfect task...
                   </span>
                 </div>
               </div>
@@ -250,7 +359,7 @@ export function TaskClarificationChat({
             <div className="space-y-3">
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3">
                 <p className="text-sm text-green-800 dark:text-green-200">
-                  ✅ Ready to create task: <strong>{currentTask.title}</strong>
+                  ✅ Ready to create perfectly formatted task: <strong>{currentTask.title}</strong>
                 </p>
               </div>
               <div className="flex space-x-2">
@@ -258,7 +367,7 @@ export function TaskClarificationChat({
                   onClick={handleCreateTask}
                   className="btn-primary flex-1"
                 >
-                  🎯 Create Task
+                  🎯 Create Perfect Task
                 </button>
                 <button
                   onClick={onClose}
@@ -276,7 +385,7 @@ export function TaskClarificationChat({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Type your answer here..."
+                placeholder="Provide details to create a perfect task..."
                 className="input flex-1"
                 disabled={isProcessing}
               />

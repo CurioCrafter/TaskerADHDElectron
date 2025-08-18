@@ -287,10 +287,10 @@ export default function DashboardPage() {
             </button>
             <button 
               onClick={() => setUseStaging(!useStaging)}
-              className={`btn-ghost text-xs ${useStaging ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'text-gray-500'}`}
+              className={`btn-ghost text-xs ${useStaging ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-2 border-red-300 dark:border-red-600' : 'text-gray-500'}`}
               title={`Toggle staging mode: ${useStaging ? 'ON - new tasks go to staging' : 'OFF - tasks go directly to board'}`}
             >
-              {useStaging ? '📋 Staging ON' : '📋 Staging OFF'}
+              {useStaging ? '⚠️ Staging ON' : '📋 Staging OFF'}
             </button>
             <button 
               onClick={() => setShowEnergyDashboard(!showEnergyDashboard)}
@@ -349,6 +349,24 @@ export default function DashboardPage() {
 
         {/* Welcome Section */}
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          {/* Staging Warning */}
+          {useStaging && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <span className="text-red-600 dark:text-red-400">⚠️</span>
+                <span className="text-sm text-red-800 dark:text-red-200 font-medium">
+                  Staging Mode is ON - New tasks will be sent to staging for review instead of directly to your board
+                </span>
+                <button 
+                  onClick={() => setUseStaging(false)}
+                  className="ml-auto text-xs bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-300 px-2 py-1 rounded hover:bg-red-200 dark:hover:bg-red-700"
+                >
+                  Turn OFF
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">

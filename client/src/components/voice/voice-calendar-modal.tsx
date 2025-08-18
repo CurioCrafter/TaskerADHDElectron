@@ -39,6 +39,7 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
   // Sync with global staging preference
   useEffect(() => {
     setUseStaging(globalUseStaging)
+    console.log('🔧 [VOICE_CALENDAR] useStaging updated:', { globalUseStaging, localUseStaging: useStaging })
   }, [globalUseStaging])
 
   if (!isOpen || !proposals) return null
@@ -85,6 +86,15 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
       toast.error('Please select at least one item to create')
       return
     }
+
+    // Debug: log the staging decision
+    console.log('🔧 [VOICE_CALENDAR] Staging decision:', {
+      useStaging,
+      currentBoard: !!currentBoard,
+      willUseStaging: !currentBoard || useStaging,
+      selectedTasksCount: selectedTasks.size,
+      selectedEventsCount: selectedEvents.size
+    })
 
     setIsCreating(true)
     let tasksCreated = 0
@@ -412,8 +422,15 @@ export function VoiceCalendarModal({ isOpen, onClose, proposals, transcript, use
             </div>
             <div className="flex items-center gap-3">
               <label className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                <input type="checkbox" className="mr-2" checked={useStaging} onChange={(e) => setUseStaging(e.target.checked)} />
-                Use Staging for tasks
+                <input 
+                  type="checkbox" 
+                  className="mr-2" 
+                  checked={useStaging} 
+                  onChange={(e) => setUseStaging(e.target.checked)} 
+                />
+                <span className={useStaging ? 'text-orange-600 dark:text-orange-400 font-medium' : 'text-gray-600 dark:text-gray-300'}>
+                  {useStaging ? '⚠️ Override: Use Staging' : 'Use Staging (overrides global setting)'}
+                </span>
               </label>
               <button
                 onClick={onClose}
