@@ -2,6 +2,8 @@
 
 **ADHD-friendly task management with time tracking, energy awareness, and focus tools.**
 
+![TaskerADHD Application](TaskerADHD_4fgN28K1Kf.png)
+
 <a href="https://www.buymeacoffee.com/curiocrafter" target="_blank">
   <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174">
 </a>
