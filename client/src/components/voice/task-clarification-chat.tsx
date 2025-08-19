@@ -238,22 +238,39 @@ export function TaskClarificationChat({
   const enhanceTaskWithConversation = (task: any, originalTranscript: string, messages: ChatMessage[], latestResponse: string): any => {
     const enhancedTask = { ...task }
     
-    // Extract day information from conversation if missing
+    // Robust combined parse from full conversation (handles "next monday 5pm", etc.)
+    const fullText = `${originalTranscript} ${messages.map(m => m.content).join(' ')} ${latestResponse}`
+    try {
+      const parsedIso = parseUserTimeInput(fullText)
+      if (parsedIso) {
+        enhancedTask.dueAt = parsedIso
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to parse user time input:', e)
+    }
+    
+    // If still no ISO dueAt, try simple day/time extraction as fallback
     if (!enhancedTask.dueAt) {
       const dayMatch = extractDayFromConversation(originalTranscript, messages, latestResponse)
       if (dayMatch) {
         enhancedTask.dueAt = dayMatch
       }
     }
-    
-    // Extract time information if missing
-    if (!enhancedTask.dueAt || !enhancedTask.dueAt.toString().includes('T')) {
+    if (!enhancedTask.dueAt) {
+      // Default fallback: tomorrow at 9am
+      const d = new Date()
+      d.setDate(d.getDate() + 1)
+      d.setHours(9, 0, 0, 0)
+      enhancedTask.dueAt = d.toISOString()
+    } else if (!String(enhancedTask.dueAt).includes('T')) {
       const timeMatch = extractTimeFromConversation(originalTranscript, messages, latestResponse)
-      if (timeMatch && enhancedTask.dueAt) {
-        const currentDate = enhancedTask.dueAt instanceof Date ? enhancedTask.dueAt : new Date(enhancedTask.dueAt)
+      if (timeMatch) {
         const [hours, minutes] = timeMatch.split(':').map(Number)
-        currentDate.setHours(hours, minutes, 0, 0)
-        enhancedTask.dueAt = currentDate.toISOString()
+        const base = new Date(String(enhancedTask.dueAt))
+        if (!isNaN(base.getTime())) {
+          base.setHours(hours, minutes, 0, 0)
+          enhancedTask.dueAt = base.toISOString()
+        }
       }
     }
     
@@ -268,6 +285,103 @@ export function TaskClarificationChat({
     if (!enhancedTask.subtasks) enhancedTask.subtasks = []
     
     return enhancedTask
+  }
+
+  // Parse natural phrases like "next monday 5pm", "tomorrow at 8", "friday evening"
+  const parseUserTimeInput = (text: string): string | null => {
+    const lower = text.toLowerCase()
+    const now = new Date()
+
+    // Day keywords
+    const dayMap: Record<string, number> = {
+      sunday: 0, sun: 0,
+      monday: 1, mon: 1,
+      tuesday: 2, tue: 2, tues: 2,
+      wednesday: 3, wed: 3,
+      thursday: 4, thu: 4, thurs: 4,
+      friday: 5, fri: 5,
+      saturday: 6, sat: 6
+    }
+
+    // Time phrases
+    const timeRegex = /(\b\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b|\b(morning|afternoon|evening|night|noon|midday)\b/
+
+    const pickNext = (weekday: number): Date => {
+      const d = new Date(now)
+      const diff = (weekday - d.getDay() + 7) % 7
+      d.setDate(d.getDate() + (diff === 0 ? 7 : diff)) // always next occurrence
+      d.setHours(9, 0, 0, 0)
+      return d
+    }
+
+    const setTime = (d: Date, match: RegExpMatchArray): Date => {
+      let hh = 9
+      let mm = 0
+      if (match[1]) {
+        hh = parseInt(match[1])
+        mm = match[2] ? parseInt(match[2]) : 0
+        const ap = match[3]?.toLowerCase()
+        if (ap === 'pm' && hh !== 12) hh += 12
+        if (ap === 'am' && hh === 12) hh = 0
+      } else if (match[4]) {
+        const named = match[4]
+        if (named === 'morning') { hh = 9; mm = 0 }
+        else if (named === 'afternoon') { hh = 14; mm = 0 }
+        else if (named === 'evening') { hh = 18; mm = 0 }
+        else if (named === 'night') { hh = 20; mm = 0 }
+        else if (named === 'noon' || named === 'midday') { hh = 12; mm = 0 }
+      }
+      d.setHours(hh, mm, 0, 0)
+      return d
+    }
+
+    // Handle today/tomorrow
+    if (/(\btoday\b)/.test(lower)) {
+      const d = new Date(now)
+      const m = lower.match(timeRegex)
+      setTime(d, m as any || [])
+      return isNaN(d.getTime()) ? null : d.toISOString()
+    }
+    if (/(\btomorrow\b)/.test(lower)) {
+      const d = new Date(now)
+      d.setDate(d.getDate() + 1)
+      const m = lower.match(timeRegex)
+      setTime(d, m as any || [])
+      return isNaN(d.getTime()) ? null : d.toISOString()
+    }
+
+    // Handle "next <weekday>" or just weekday
+    const nextMatch = lower.match(/next\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/)
+    if (nextMatch) {
+      const weekday = dayMap[nextMatch[1]]
+      const d = pickNext(weekday)
+      const m = lower.match(timeRegex)
+      if (m) setTime(d, m)
+      return d.toISOString()
+    }
+    const dayOnly = lower.match(/\b(sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thurs|thursday|fri|friday|sat|saturday)\b/)
+    if (dayOnly) {
+      const weekday = dayMap[dayOnly[1]]
+      // If same day mentioned, choose next occurrence to avoid past times
+      const d = pickNext(weekday)
+      const m = lower.match(timeRegex)
+      if (m) setTime(d, m)
+      return d.toISOString()
+    }
+
+    // Direct time today/tomorrow default
+    const directTime = lower.match(timeRegex)
+    if (directTime) {
+      const d = new Date(now)
+      setTime(d, directTime)
+      // If time already passed today, move to tomorrow
+      if (d.getTime() <= now.getTime()) {
+        d.setDate(d.getDate() + 1)
+      }
+      return d.toISOString()
+    }
+
+    return null
   }
 
   // Helper function to extract day information from conversation

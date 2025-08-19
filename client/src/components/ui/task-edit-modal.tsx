@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import { toast } from 'react-hot-toast'
 import { useBoardStore } from '@/stores/board'
-import type { Task, TaskPriority, EnergyLevel } from '@/types'
+import type { Task, TaskPriority, EnergyLevel } from '@/types/task.types'
 
 interface TaskEditModalProps {
 	isOpen: boolean

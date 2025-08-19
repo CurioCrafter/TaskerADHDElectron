@@ -172,11 +172,13 @@ export default function CalendarPage() {
     if (typeof window !== 'undefined') {
       console.log('🔧 [CALENDAR] Adding event listener for taskUpdated')
       window.addEventListener('taskUpdated', handler)
+      window.addEventListener('tasksUpdated', handler)
     }
     return () => {
       if (typeof window !== 'undefined') {
         console.log('🔧 [CALENDAR] Removing event listener for taskUpdated')
         window.removeEventListener('taskUpdated', handler)
+        window.removeEventListener('tasksUpdated', handler)
       }
     }
   }, [])
@@ -201,8 +203,10 @@ export default function CalendarPage() {
           if (column.tasks) {
             column.tasks.forEach(task => {
               if (task.dueAt) {
+                const safeTask: any = { ...task }
+                if (safeTask.position === undefined) safeTask.position = 0
                 allTasks.push({
-                  ...task,
+                  ...safeTask,
                   boardName: board.name,
                   boardId: board.id
                 })
@@ -388,9 +392,9 @@ export default function CalendarPage() {
       }
       
       // Calculate next occurrence based on repeat pattern
-      if (task.repeatPattern === 'daily') {
+      if (task.repeatPattern === 'DAILY' || (task as any).repeatPattern === 'daily') {
         currentDate = addDays(currentDate, task.repeatInterval || 1)
-      } else if (task.repeatPattern === 'weekly') {
+      } else if (task.repeatPattern === 'WEEKLY' || (task as any).repeatPattern === 'weekly') {
         if (task.repeatDays && task.repeatDays.length > 0) {
           // Handle specific days of the week (e.g., weekends = [0,6])
           const currentDay = currentDate.getDay()
@@ -410,7 +414,7 @@ export default function CalendarPage() {
           // No specific days, just add weeks
           currentDate = addDays(currentDate, 7 * (task.repeatInterval || 1))
         }
-      } else if (task.repeatPattern === 'monthly') {
+      } else if (task.repeatPattern === 'MONTHLY' || (task as any).repeatPattern === 'monthly') {
         currentDate = addDays(currentDate, 30 * (task.repeatInterval || 1))
       } else {
         // Default to weekly if pattern is unclear
@@ -421,7 +425,7 @@ export default function CalendarPage() {
       if (task.repeatCount && instances.length >= task.repeatCount) break
       
       // Stop if we have a repeat end date
-      if (task.repeatEndDate && currentDate > parseISO(task.repeatEndDate)) break
+      if (task.repeatEndDate && currentDate > new Date(task.repeatEndDate as any)) break
     }
     
     if (debugMode) {

@@ -103,12 +103,22 @@ export function TaskProposalModal({ isOpen, onClose, proposals, transcript, useS
             // Create directly on the current board when staging is OFF
             await createTask({
               title: finalTask.title,
-              summary: finalTask.summary,
+              description: finalTask.summary,
               priority: finalTask.priority as any,
               energy: finalTask.energy as any,
-              dueAt: finalTask.dueAt,
-              estimateMin: finalTask.estimateMin,
-              isRepeatable: finalTask.isRepeatable || false
+              dueDate: finalTask.dueAt,
+              estimatedMinutes: finalTask.estimateMin,
+              labels: finalTask.labels || [],
+              // Repeatable mapping to store API
+              isRepeating: finalTask.isRepeatable || false,
+              repeatPattern: (finalTask.repeatPattern?.toUpperCase?.() as any) || undefined,
+              repeatInterval: finalTask.repeatInterval,
+              repeatDays: finalTask.repeatDays,
+              repeatEndDate: finalTask.repeatEndDate,
+              repeatCount: finalTask.repeatCount,
+              confidence: finalTask.confidence,
+              sourceTranscript: transcript,
+              aiGenerated: true
             })
             
             // Add to success summary

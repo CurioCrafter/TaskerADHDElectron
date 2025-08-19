@@ -130,9 +130,30 @@ export default function ProjectsPage() {
     tagInput: ''
   })
 
-  // Load boards on mount
+  // Load boards on mount and refresh on cross-component task events
   useEffect(() => {
     fetchBoards()
+  }, [fetchBoards])
+
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        console.log('🔄 [PROJECTS] tasksUpdated received → refreshing boards')
+        await fetchBoards()
+      } catch (e) {
+        console.warn('⚠️ [PROJECTS] Failed to refresh boards on tasksUpdated', e)
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tasksUpdated', refresh)
+      window.addEventListener('taskUpdated', refresh)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tasksUpdated', refresh)
+        window.removeEventListener('taskUpdated', refresh)
+      }
+    }
   }, [fetchBoards])
 
   // Filter to show all boards except templates
